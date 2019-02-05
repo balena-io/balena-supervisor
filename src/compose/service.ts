@@ -47,7 +47,6 @@ export class Service {
 		'tmpfs',
 		'extraHosts',
 		'expose',
-		'ulimitsArray',
 		'groupAdd',
 		'securityOpt',
 	];
@@ -641,11 +640,9 @@ export class Service {
 			sameConfig &&
 			_.every(Service.configArrayFields, (field: ServiceConfigArrayField) => {
 				return _.isEmpty(
-					_.xorWith(
-						// TODO: The typings here aren't accepted, even though we
-						// know it's fine
-						(this.config as any)[field],
-						(service.config as any)[field],
+					_.xorWith<string | DockerDevice>(
+						this.config[field],
+						service.config[field],
 						(a, b) => {
 							const eq = _.isEqual(a, b);
 							if (!eq) {

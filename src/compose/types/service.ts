@@ -100,9 +100,9 @@ export interface ServiceConfig {
 	command: string[];
 	cgroupParent: string;
 	devices: DockerDevice[];
-	dns: string | string[];
+	dns: string[];
 	dnsOpt: string[];
-	dnsSearch: string | string[];
+	dnsSearch: string[];
 	tmpfs: string[];
 	entrypoint: string | string[];
 	environment: { [envVarName: string]: string };
@@ -165,7 +165,6 @@ export type ServiceConfigArrayField =
 	| 'expose'
 	| 'tmpfs'
 	| 'extraHosts'
-	| 'ulimitsArray'
 	| 'groupAdd'
 	| 'securityOpt';
 
