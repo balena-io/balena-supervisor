@@ -46,4 +46,4 @@ if [ ! -z "${BALENA_ROOT_CA}" ]; then
 	fi
 fi
 
-exec node /usr/src/app/dist/app.js
+exec node --max_old_space_size=50 --optimize_for_size --always_compact /usr/src/app/dist/app.js
