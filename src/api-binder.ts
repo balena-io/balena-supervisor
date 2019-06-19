@@ -196,7 +196,10 @@ export class APIBinder {
 			// value to '', to ensure that when we do re-provision, we'll report
 			// the config and hardward-specific options won't be lost
 			if (!apiEndpoint) {
-				await this.config.set({ initialConfigReported: '' });
+				await this.config.set({
+					initialConfigReported: '',
+					udevRulesReported: '',
+				});
 			}
 			return;
 		}
@@ -205,15 +208,21 @@ export class APIBinder {
 		await this.provisionDevice();
 		const conf2 = await this.config.getMany([
 			'initialConfigReported',
+			'udevRulesReported',
 			'apiEndpoint',
 		]);
 		apiEndpoint = conf2.apiEndpoint;
-		const { initialConfigReported } = conf2;
+		const { initialConfigReported, udevRulesReported } = conf2;
 
 		// Either we haven't reported our initial config or we've been re-provisioned
 		if (apiEndpoint !== initialConfigReported) {
 			log.info('Reporting initial configuration');
 			await this.reportInitialConfig(apiEndpoint, bootstrapRetryDelay);
+		}
+
+		if (apiEndpoint !== udevRulesReported) {
+			log.debug('Reporting on-device udev rules');
+			await this.reportUdev(apiEndpoint);
 		}
 
 		log.debug('Starting current state report');
@@ -705,6 +714,31 @@ export class APIBinder {
 		}
 
 		await this.config.set({ initialConfigReported: apiEndpoint });
+	}
+
+	private async reportUdev(apiEndpoint: string) {
+		if (this.balenaApi == null) {
+			throw new InternalInconsistencyError(
+				'Attempt to report udev rules with no api client initialised',
+			);
+		}
+		const deviceId = await this.config.get('deviceId');
+		const udev = await this.config.get('udevRules');
+		const toReport = _.mapKeys(udev, (_v, k) => `HOST_CONFIG_UDEV_${k}`);
+
+		for (const name of _.keys(toReport)) {
+			const envVar = {
+				value: toReport[name],
+				device: deviceId,
+				name: `RESIN_${name}`,
+			};
+			await this.balenaApi.post({
+				resource: 'device_config_variable',
+				body: envVar,
+			});
+		}
+
+		await this.config.set({ udevRulesReported: apiEndpoint });
 	}
 
 	private async reportInitialConfig(

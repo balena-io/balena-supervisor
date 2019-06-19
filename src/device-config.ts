@@ -11,8 +11,11 @@ import * as configUtils from './config/utils';
 import { UnitNotLoadedError } from './lib/errors';
 import * as systemd from './lib/systemd';
 import { EnvVarObject } from './lib/types';
+import * as udev from './lib/udev';
 import { checkInt, checkTruthy } from './lib/validation';
 import { DeviceApplicationState } from './types/state';
+
+import log from './lib/supervisor-console';
 
 const vpnServiceName = 'openvpn-resin';
 
@@ -29,7 +32,7 @@ interface ConfigOption {
 	rebootRequired?: boolean;
 }
 
-interface ConfigStep {
+export interface ConfigStep {
 	// TODO: This is a bit of a mess, the DeviceConfig class shouldn't
 	// know that the reboot action exists as it is implemented by
 	// DeviceState. Fix this weird circular dependency
@@ -52,6 +55,7 @@ interface DeviceActionExecutors {
 	changeConfig: DeviceActionExecutorFn;
 	setVPNEnabled: DeviceActionExecutorFn;
 	setBootConfig: DeviceActionExecutorFn;
+	restartUdevService: DeviceActionExecutorFn;
 }
 
 export class DeviceConfig {
@@ -137,6 +141,8 @@ export class DeviceConfig {
 		..._.map(DeviceConfig.configKeys, 'envVarName'),
 	];
 
+	public static validNamespaces = [udev.UDEV_VAR_NAMESPACE];
+
 	private rateLimits: Dictionary<{
 		duration: number;
 		lastAttempt: number | null;
@@ -211,6 +217,11 @@ export class DeviceConfig {
 				await this.setBootConfig(configBackend, step.target as Dictionary<
 					string
 				>);
+			},
+			restartUdevService: async () => {
+				log.info('Restarting udev service');
+				await this.restartUdevService();
+				this.rebootRequired = true;
 			},
 		};
 	}
@@ -308,6 +319,7 @@ export class DeviceConfig {
 		return await configUtils.formatConfigKeys(
 			backend,
 			DeviceConfig.validKeys,
+			DeviceConfig.validNamespaces,
 			conf,
 		);
 	}
@@ -372,7 +384,7 @@ export class DeviceConfig {
 			['local', 'config'],
 			{},
 		);
-		const target: Dictionary<string> = _.get(
+		let target: Dictionary<string> = _.get(
 			targetState,
 			['local', 'config'],
 			{},
@@ -389,6 +401,17 @@ export class DeviceConfig {
 		const configChanges: Dictionary<string> = {};
 		const humanReadableConfigChanges: Dictionary<string> = {};
 		let reboot = false;
+
+		// Look through the target values for any reserved
+		// namespaces which we handle differently
+		// TODO: Make this more efficient
+		const namespaced = _.pickBy(target, (_v, k) =>
+			DeviceConfig.isPartOfValidNamespace(k),
+		);
+		target = _.omitBy(target, (_v, k) =>
+			DeviceConfig.isPartOfValidNamespace(k),
+		);
+		steps = steps.concat(await this.handleNamespacedVars(namespaced));
 
 		_.each(
 			DeviceConfig.configKeys,
@@ -508,6 +531,16 @@ export class DeviceConfig {
 		return _.includes(_.keys(this.actionExecutors), action);
 	}
 
+	private async handleNamespacedVars(
+		vars: Dictionary<string>,
+	): Promise<ConfigStep[]> {
+		// As there's currently only a single namespace, we pass
+		// everything directly to the udev module. In the
+		// future, we'll need to distribute the vars between the
+		// correct handlers
+		return await udev.handleUdevRuleVars(this.config, vars);
+	}
+
 	private async getBootConfig(
 		backend: DeviceConfigBackend | null,
 	): Promise<EnvVarObject> {
@@ -580,6 +613,10 @@ export class DeviceConfig {
 		}
 	}
 
+	private async restartUdevService(): Promise<void> {
+		await systemd.restartService(udev.UDEV_SERVICE_NAME);
+	}
+
 	private static configTest(method: string, a: string, b: string): boolean {
 		switch (method) {
 			case 'bool':
@@ -614,6 +651,12 @@ export class DeviceConfig {
 		}
 		conf.dtoverlay = (conf.dtoverlay as string[]).filter(s => !_.isEmpty(s));
 		return conf;
+	}
+
+	private static isPartOfValidNamespace(key: string): boolean {
+		return _.some(DeviceConfig.validNamespaces, n =>
+			_.startsWith(key, `${n}_`),
+		);
 	}
 }
 

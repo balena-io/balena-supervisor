@@ -7,12 +7,15 @@ import { readLock, writeLock } from '../lib/update-lock';
 import * as Schema from './schema';
 
 import * as constants from '../lib/constants';
+import { InternalInconsistencyError } from '../lib/errors';
 import { writeAndSyncFile, writeFileAtomic } from '../lib/fs-utils';
 import * as osRelease from '../lib/os-release';
 
 import log from '../lib/supervisor-console';
 
 export default class ConfigJsonConfigBackend {
+	private static SyntheticKeys = ['udevRules'];
+
 	private readLockConfigJson: () => Promise.Disposer<() => void>;
 	private writeLockConfigJson: () => Promise.Disposer<() => void>;
 
@@ -33,7 +36,10 @@ export default class ConfigJsonConfigBackend {
 
 	public init(): Promise<void> {
 		return this.read().then(configJson => {
-			_.assign(this.cache, configJson);
+			_.assign(
+				this.cache,
+				ConfigJsonConfigBackend.diskToCacheFormat(configJson),
+			);
 		});
 	}
 
@@ -45,7 +51,7 @@ export default class ConfigJsonConfigBackend {
 			return Promise.mapSeries(_.keys(keyVals) as T[], (key: T) => {
 				const value = keyVals[key];
 
-				if (this.cache[key] !== value) {
+				if (!_.isEqual(this.cache[key], value)) {
 					this.cache[key] = value;
 
 					if (
@@ -68,7 +74,7 @@ export default class ConfigJsonConfigBackend {
 
 	public get(key: string): Promise<unknown> {
 		return Promise.using(this.readLockConfigJson(), () => {
-			return Promise.resolve(this.cache[key]);
+			return Promise.resolve(_.cloneDeep(this.cache[key]));
 		});
 	}
 
@@ -105,14 +111,24 @@ export default class ConfigJsonConfigBackend {
 			})
 			.then(configPath => {
 				if (atomicWritePossible) {
-					return writeFileAtomic(configPath, JSON.stringify(this.cache));
+					return writeFileAtomic(
+						configPath,
+						JSON.stringify(
+							ConfigJsonConfigBackend.cacheToDiskFormat(this.cache),
+						),
+					);
 				} else {
-					return writeAndSyncFile(configPath, JSON.stringify(this.cache));
+					return writeAndSyncFile(
+						configPath,
+						JSON.stringify(
+							ConfigJsonConfigBackend.cacheToDiskFormat(this.cache),
+						),
+					);
 				}
 			});
 	}
 
-	private read(): Promise<string> {
+	private read(): Promise<Dictionary<unknown>> {
 		return this.path()
 			.then(filename => {
 				return fs.readFile(filename, 'utf-8');
@@ -152,5 +168,65 @@ export default class ConfigJsonConfigBackend {
 		}).then(file => {
 			return path.join(constants.rootMountPoint, file);
 		});
+	}
+
+	// Public so we can unit-test it
+	public static cacheToDiskFormat(
+		cache: Dictionary<unknown>,
+	): Dictionary<unknown> {
+		const diskFormat: Dictionary<unknown> = {};
+		_.each(cache, (value, key) => {
+			if (_.includes(ConfigJsonConfigBackend.SyntheticKeys, key)) {
+				ConfigJsonConfigBackend.syntheticKeyToDiskFormat(
+					key,
+					cache[key],
+					diskFormat,
+				);
+			} else {
+				diskFormat[key] = value;
+			}
+		});
+
+		return diskFormat;
+	}
+
+	public static diskToCacheFormat(
+		diskFormat: Dictionary<unknown>,
+	): Dictionary<unknown> {
+		const cache: Dictionary<unknown> = {};
+		_.each(diskFormat, (value, key) => {
+			// TODO: Think of a way to make this more general
+			if (key !== 'os') {
+				cache[key] = value;
+			} else {
+				if (!_.isObject(value)) {
+					log.warn(
+						'Ignoring malformed os value in config.json, value: ',
+						value,
+					);
+					return;
+				}
+				const obj = value as Dictionary<unknown>;
+				if ('udevRules' in obj) {
+					cache.udevRules = obj.udevRules;
+				}
+			}
+		});
+		return cache;
+	}
+
+	// Modifies diskFormat
+	private static syntheticKeyToDiskFormat(
+		key: string,
+		value: unknown,
+		diskFormat: Dictionary<unknown>,
+	): void {
+		if (key === 'udevRules') {
+			_.set(diskFormat, ['os', 'udevRules'], value);
+		} else {
+			throw new InternalInconsistencyError(
+				`Non-synthetic key passed to syntheticKeyToDiskFormat: ${key}`,
+			);
+		}
 	}
 }

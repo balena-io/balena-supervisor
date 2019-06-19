@@ -69,6 +69,7 @@ function filterNamespaceFromConfig(
 export function formatConfigKeys(
 	configBackend: DeviceConfigBackend | null,
 	allowedKeys: string[],
+	allowedNamespaces: string[],
 	conf: { [key: string]: any },
 ): { [key: string]: any } {
 	const isConfigType = configBackend != null;
@@ -91,7 +92,8 @@ export function formatConfigKeys(
 	return _.pickBy(confWithoutNamespace, (_v, k) => {
 		return (
 			_.includes(allowedKeys, k) ||
-			(isConfigType && configBackend!.isBootConfigVar(k))
+			(isConfigType && configBackend!.isBootConfigVar(k)) ||
+			_.some(allowedNamespaces, n => _.startsWith(k, n))
 		);
 	});
 }

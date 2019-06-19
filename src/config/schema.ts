@@ -89,6 +89,11 @@ export const schema = {
 		mutable: true,
 		removeIfNull: false,
 	},
+	udevRules: {
+		source: 'config.json',
+		mutable: true,
+		removeIfNull: false,
+	},
 
 	apiSecret: {
 		source: 'db',
@@ -186,6 +191,11 @@ export const schema = {
 		removeIfNull: false,
 	},
 	instantUpdates: {
+		source: 'db',
+		mutable: true,
+		removeIfNull: false,
+	},
+	udevRulesReported: {
 		source: 'db',
 		mutable: true,
 		removeIfNull: false,

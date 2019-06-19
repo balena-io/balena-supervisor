@@ -86,6 +86,10 @@ export const schemaTypes = {
 		type: PermissiveBoolean,
 		default: false,
 	},
+	udevRules: {
+		type: t.record(t.string, t.string),
+		default: NullOrUndefined,
+	},
 
 	// Database types
 	apiSecret: {
@@ -165,6 +169,10 @@ export const schemaTypes = {
 	localMode: {
 		type: PermissiveBoolean,
 		default: false,
+	},
+	udevRulesReported: {
+		type: t.string,
+		default: NullOrUndefined,
 	},
 
 	// Function schema types
