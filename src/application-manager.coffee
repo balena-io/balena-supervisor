@@ -79,7 +79,11 @@ module.exports = class ApplicationManager extends EventEmitter
 		@localModeManager = new LocalModeManager(@config, @docker, @logger, @db)
 		@timeSpentFetching = 0
 		@fetchesInProgress = 0
+		# @_targetVolatilePerImageId keeps volatile parts of the target state, indexed by imageId. This is useful when executing
+		# changes in the target state that should not persist across reboots, e.g. when stopping a container from a supervisor API action.
 		@_targetVolatilePerImageId = {}
+		# @_containerStarted is indexed by containerId and keeps track of the containers that have already been started, to avoid
+		# triggering consecutive start actions for the same container.
 		@_containerStarted = {}
 
 		@targetStateWrapper = new TargetStateAccessor(this, @config, @db)

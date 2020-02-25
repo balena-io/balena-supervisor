@@ -114,11 +114,20 @@ createDeviceStateRouter = (deviceState) ->
 
 module.exports = class DeviceState extends EventEmitter
 	constructor: ({ @db, @config, @eventTracker, @logger }) ->
+		# @deviceConfig (a DeviceConfig instance) manages the parts of the state that refers to device
+		# and supervisor configuration, defined as configuration variables.
 		@deviceConfig = new DeviceConfig({ @db, @config, @logger })
+		# @applications (an ApplicationManager instance) manages the parts of the state that refers to
+		# applications, with services, networks and volumes. It also contains the Proxyvisor that handles
+		# dependent applications and devices.
 		@applications = new ApplicationManager({ @config, @logger, @db, @eventTracker, deviceState: this })
 		@on 'error', (err) ->
 			log.error('deviceState error: ', err)
+		# @_currentVolatile keeps the volatile parts of the current state, usually describing things
+		# that the supervisor is doing (e.g. update_failed) or runtime state of the device like ip_address.
+		# This gets merged to the .local part of the current state that is reported to the API.
 		@_currentVolatile = {}
+		# We use rwlocks to avoid issues with async code accessing specific resources, e.g. writing the target state to the DB.
 		@_writeLock = updateLock.writeLock
 		@_readLock = updateLock.readLock
 		@lastSuccessfulUpdate = null
