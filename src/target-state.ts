@@ -3,6 +3,7 @@ import * as _ from 'lodash';
 import ApplicationManager from './application-manager';
 import Config from './config';
 import Database, { Transaction } from './db';
+import * as globalEventBus from './event-bus';
 
 // Once we have correct types for both applications and the
 // incoming target state this should be changed
@@ -31,7 +32,7 @@ export class TargetStateAccessor {
 		// If we switch backend, the target state also needs to
 		// be invalidated (this includes switching to and from
 		// local mode)
-		this.config.on('change', conf => {
+		globalEventBus.getInstance().on('configChanged', conf => {
 			if (conf.apiEndpoint != null || conf.localMode != null) {
 				this.targetState = undefined;
 			}

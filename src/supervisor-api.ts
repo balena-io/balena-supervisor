@@ -5,6 +5,7 @@ import * as _ from 'lodash';
 import * as morgan from 'morgan';
 
 import Config from './config';
+import * as globalEventBus from './event-bus';
 import { EventTracker } from './event-tracker';
 import blink = require('./lib/blink');
 import * as iptables from './lib/iptables';
@@ -174,7 +175,7 @@ export class SupervisorAPI {
 
 		// Monitor the switching of local mode, and change which interfaces will
 		// be listened to based on that
-		this.config.on('change', changedConfig => {
+		globalEventBus.getInstance().on('configChanged', changedConfig => {
 			if (changedConfig.localMode != null) {
 				this.applyListeningRules(
 					changedConfig.localMode || false,

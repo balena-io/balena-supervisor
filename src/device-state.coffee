@@ -18,6 +18,7 @@ updateLock = require './lib/update-lock'
 ApplicationManager = require './application-manager'
 
 { log } = require './lib/supervisor-console'
+globalEventBus = require './event-bus'
 
 validateLocalState = (state) ->
 	if state.name?
@@ -152,7 +153,7 @@ module.exports = class DeviceState extends EventEmitter
 			return applyTargetHealthy
 
 	init: ->
-		@config.on 'change', (changedConfig) =>
+		globalEventBus.getInstance().on 'configChanged', (changedConfig) =>
 			if changedConfig.loggingEnabled?
 				@logger.enable(changedConfig.loggingEnabled)
 			if changedConfig.apiSecret?
@@ -209,7 +210,7 @@ module.exports = class DeviceState extends EventEmitter
 	initNetworkChecks: ({ apiEndpoint, connectivityCheckEnabled, unmanaged }) =>
 		network.startConnectivityCheck apiEndpoint, connectivityCheckEnabled, (connected) =>
 			@connected = connected
-		@config.on 'change', (changedConfig) ->
+		globalEventBus.getInstance().on 'configChanged', (changedConfig) ->
 			if changedConfig.connectivityCheckEnabled?
 				network.enableConnectivityCheck(changedConfig.connectivityCheckEnabled)
 		log.debug('Starting periodic check for IP addresses')

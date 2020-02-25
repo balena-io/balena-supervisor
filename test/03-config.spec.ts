@@ -11,6 +11,7 @@ const { expect } = chai;
 
 import Config from '../src/config';
 import DB from '../src/db';
+import * as globalEventBus from '../src/event-bus';
 import constants = require('../src/lib/constants');
 
 describe('Config', () => {
@@ -117,7 +118,7 @@ describe('Config', () => {
 	});
 
 	it('emits a change event when values are set', done => {
-		conf.on('change', val => {
+		globalEventBus.getInstance().on('configChanged', val => {
 			expect(val).to.deep.equal({ name: 'someValue' });
 			return done();
 		});

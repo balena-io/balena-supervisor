@@ -1,9 +1,7 @@
 import * as Bluebird from 'bluebird';
-import { EventEmitter } from 'events';
 import { Transaction } from 'knex';
 import * as _ from 'lodash';
 import { generateUniqueKey } from 'resin-register-device';
-import StrictEventEmitter from 'strict-event-emitter-types';
 import { inspect } from 'util';
 
 import { Either, isLeft, isRight, Right } from 'fp-ts/lib/Either';
@@ -16,6 +14,7 @@ import * as Schema from './schema';
 import { SchemaReturn, SchemaTypeKey, schemaTypes } from './schema-type';
 
 import DB from '../db';
+import * as globalEventBus from '../event-bus';
 import {
 	ConfigurationValidationError,
 	InternalInconsistencyError,
@@ -37,18 +36,11 @@ export type ConfigChangeMap<T extends SchemaTypeKey> = {
 export type ConfigKey = SchemaTypeKey;
 export type ConfigType<T extends ConfigKey> = SchemaReturn<T>;
 
-interface ConfigEvents {
-	change: ConfigChangeMap<SchemaTypeKey>;
-}
-
-type ConfigEventEmitter = StrictEventEmitter<EventEmitter, ConfigEvents>;
-
-export class Config extends (EventEmitter as new () => ConfigEventEmitter) {
+export class Config {
 	private db: DB;
 	private configJsonBackend: ConfigJsonConfigBackend;
 
 	public constructor({ db, configPath }: ConfigOpts) {
-		super();
 		this.db = db;
 		this.configJsonBackend = new ConfigJsonConfigBackend(
 			Schema.schema,
@@ -193,7 +185,9 @@ export class Config extends (EventEmitter as new () => ConfigEventEmitter) {
 					.return();
 			}
 		}).then(() => {
-			this.emit('change', keyValues as ConfigMap<SchemaTypeKey>);
+			globalEventBus
+				.getInstance()
+				.emit('configChanged', keyValues as ConfigMap<SchemaTypeKey>);
 		});
 	}
 

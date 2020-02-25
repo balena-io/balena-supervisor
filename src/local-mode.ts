@@ -4,11 +4,11 @@ import * as _ from 'lodash';
 
 import Config from './config';
 import Database from './db';
+import * as globalEventBus from './event-bus';
 import * as constants from './lib/constants';
 import { SupervisorContainerNotFoundError } from './lib/errors';
 import log from './lib/supervisor-console';
 import { Logger } from './logger';
-
 // EngineSnapshot represents a list of containers, images, volumens, and networks present on the engine.
 // A snapshot is taken before entering local mode in order to perform cleanup when we exit local mode.
 export class EngineSnapshot {
@@ -83,7 +83,7 @@ export class LocalModeManager {
 
 	public async init() {
 		// Setup a listener to catch state changes relating to local mode
-		this.config.on('change', changed => {
+		globalEventBus.getInstance().on('configChanged', changed => {
 			if (changed.localMode != null) {
 				const local = changed.localMode || false;
 

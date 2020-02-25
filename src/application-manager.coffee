@@ -34,6 +34,8 @@ Proxyvisor = require './proxyvisor'
 { createV2Api } = require './device-api/v2'
 { serviceAction } = require './device-api/common'
 
+globalEventBus = require './event-bus'
+
 # TODO: move this to an Image class?
 imageForService = (service) ->
 	return {
@@ -84,7 +86,7 @@ module.exports = class ApplicationManager extends EventEmitter
 
 		@targetStateWrapper = new TargetStateAccessor(this, @config, @db)
 
-		@config.on 'change', (changedConfig) =>
+		globalEventBus.getInstance().on 'configChanged', (changedConfig) =>
 			if changedConfig.appUpdatePollInterval
 				@images.appUpdatePollInterval = changedConfig.appUpdatePollInterval
 
