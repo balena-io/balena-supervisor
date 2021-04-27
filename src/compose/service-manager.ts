@@ -12,7 +12,7 @@ import { docker } from '../lib/docker-utils';
 import * as logger from '../logger';
 
 import { PermissiveNumber } from '../config/types';
-import constants = require('../lib/constants');
+import * as constants from '../lib/constants';
 import {
 	InternalInconsistencyError,
 	NotFoundError,

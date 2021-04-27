@@ -1,5 +1,5 @@
-import Bluebird = require('bluebird');
-import constants = require('../lib/constants');
+import * as Bluebird from 'bluebird';
+import * as constants from '../lib/constants';
 import log from '../lib/supervisor-console';
 import * as _ from 'lodash';
 import { InternalInconsistencyError } from '../lib/errors';

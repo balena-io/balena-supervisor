@@ -5,7 +5,7 @@ import { fs } from 'mz';
 import * as path from 'path';
 import * as Lock from 'rwlock';
 
-import constants = require('./constants');
+import * as constants from './constants';
 import { ENOENT, UpdatesLockedError } from './errors';
 
 type asyncLockFile = typeof lockFileLib & {

@@ -1,12 +1,12 @@
 import * as Bluebird from 'bluebird';
-import once = require('lodash/once');
+import * as _ from 'lodash';
 import * as requestLib from 'request';
 import * as resumableRequestLib from 'resumable-request';
 
 import * as constants from './constants';
 import * as osRelease from './os-release';
 
-import supervisorVersion = require('./supervisor-version');
+import supervisorVersion from './supervisor-version';
 
 export { requestLib };
 
@@ -40,7 +40,7 @@ type PromisifiedRequest = typeof requestLib & {
 	) => Bluebird<[requestLib.Response, any]>;
 };
 
-const getRequestInstances = once(async () => {
+const getRequestInstances = _.once(async () => {
 	// Generate the user agents with out versions
 	const osVersion = await osRelease.getOSVersion(constants.hostOSVersionPath);
 	const osVariant = await osRelease.getOSVariant(constants.hostOSVersionPath);
@@ -81,14 +81,14 @@ const getRequestInstances = once(async () => {
 	};
 });
 
-export const getRequestInstance = once(async () => {
+export const getRequestInstance = _.once(async () => {
 	return (await getRequestInstances()).request;
 });
 
-export const getRequestOptions = once(async () => {
+export const getRequestOptions = _.once(async () => {
 	return (await getRequestInstances()).requestOpts;
 });
 
-export const getResumableRequest = once(async () => {
+export const getResumableRequest = _.once(async () => {
 	return (await getRequestInstances()).resumable;
 });

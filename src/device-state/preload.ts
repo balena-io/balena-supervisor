@@ -8,7 +8,7 @@ import * as deviceConfig from '../device-config';
 import * as eventTracker from '../event-tracker';
 import * as images from '../compose/images';
 
-import constants = require('../lib/constants');
+import * as constants from '../lib/constants';
 import { AppsJsonParseError, EISDIR, ENOENT } from '../lib/errors';
 import log from '../lib/supervisor-console';
 

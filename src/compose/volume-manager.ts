@@ -2,7 +2,7 @@ import * as _ from 'lodash';
 import * as Path from 'path';
 import { VolumeInspectInfo } from 'dockerode';
 
-import constants = require('../lib/constants');
+import * as constants from '../lib/constants';
 import { NotFoundError, InternalInconsistencyError } from '../lib/errors';
 import { safeRename } from '../lib/fs-utils';
 import { docker } from '../lib/docker-utils';

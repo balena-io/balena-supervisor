@@ -4,7 +4,7 @@ import { SinonStub, stub, spy, SinonSpy } from 'sinon';
 import { expect } from './lib/chai-config';
 
 import log from '../src/lib/supervisor-console';
-import supervisorVersion = require('../src/lib/supervisor-version');
+import supervisorVersion from '../src/lib/supervisor-version';
 import * as config from '../src/config';
 
 describe('EventTracker', () => {

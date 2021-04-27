@@ -5,7 +5,7 @@ import { fs } from 'mz';
 import * as constants from '../lib/constants';
 import { docker } from '../lib/docker-utils';
 import { ENOENT, NotFoundError } from '../lib/errors';
-import logTypes = require('../lib/log-types');
+import * as logTypes from '../lib/log-types';
 import * as logger from '../logger';
 import { Network } from './network';
 

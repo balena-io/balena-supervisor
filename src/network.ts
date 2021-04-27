@@ -9,7 +9,7 @@ import * as constants from './lib/constants';
 import { EEXIST } from './lib/errors';
 import { checkFalsey } from './lib/validation';
 
-import blink = require('./lib/blink');
+import blink from './lib/blink';
 
 import log from './lib/supervisor-console';
 

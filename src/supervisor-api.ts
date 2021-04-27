@@ -5,7 +5,7 @@ import * as _ from 'lodash';
 import * as morgan from 'morgan';
 
 import * as eventTracker from './event-tracker';
-import blink = require('./lib/blink');
+import blink from './lib/blink';
 
 import log from './lib/supervisor-console';
 import * as apiKeys from './lib/api-keys';

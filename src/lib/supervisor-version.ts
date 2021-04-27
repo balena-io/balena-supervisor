@@ -7,4 +7,4 @@ const tagExtra = process.env.SUPERVISOR_TAG_EXTRA;
 if (!_.isEmpty(tagExtra)) {
 	version += '+' + tagExtra;
 }
-export = version;
+export default version;

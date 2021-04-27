@@ -11,7 +11,7 @@ import {
 	validateContract,
 } from '../src/lib/contracts';
 import * as osRelease from '../src/lib/os-release';
-import supervisorVersion = require('../src/lib/supervisor-version');
+import supervisorVersion from '../src/lib/supervisor-version';
 
 describe('Container contracts', () => {
 	before(() => {

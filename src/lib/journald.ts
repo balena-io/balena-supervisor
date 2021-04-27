@@ -1,6 +1,6 @@
 import { ChildProcess, spawn } from 'child_process';
 
-import constants = require('./constants');
+import * as constants from './constants';
 import log from './supervisor-console';
 
 export function spawnJournalctl(opts: {

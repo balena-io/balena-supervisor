@@ -27,7 +27,7 @@ import * as dbus from '../src//lib/dbus';
 import * as updateLock from '../src/lib/update-lock';
 import * as TargetState from '../src/device-state/target-state';
 import * as targetStateCache from '../src/device-state/target-state-cache';
-import blink = require('../src/lib/blink');
+import blink from '../src/lib/blink';
 import constants = require('../src/lib/constants');
 import * as deviceAPI from '../src/device-api/common';
 

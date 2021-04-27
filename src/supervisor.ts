@@ -10,7 +10,7 @@ import * as logger from './logger';
 import SupervisorAPI from './supervisor-api';
 
 import log from './lib/supervisor-console';
-import version = require('./lib/supervisor-version');
+import version from './lib/supervisor-version';
 
 import * as avahi from './lib/avahi';
 import * as firewall from './lib/firewall';

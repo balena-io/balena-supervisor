@@ -1,7 +1,7 @@
 import { fs } from 'mz';
 import { expect } from './lib/chai-config';
 
-import blink = require('../src/lib/blink');
+import blink from '../src/lib/blink';
 import constants = require('../src/lib/constants');
 
 describe('blink', () => {

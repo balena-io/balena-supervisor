@@ -5,7 +5,7 @@ import * as mixpanel from 'mixpanel';
 
 import * as config from './config';
 import log from './lib/supervisor-console';
-import supervisorVersion = require('./lib/supervisor-version');
+import supervisorVersion from './lib/supervisor-version';
 
 export type EventTrackProperties = Dictionary<any>;
 

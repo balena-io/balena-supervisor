@@ -16,7 +16,7 @@ import {
 } from './composition-steps';
 import * as targetStateCache from '../device-state/target-state-cache';
 import * as dockerUtils from '../lib/docker-utils';
-import constants = require('../lib/constants');
+import * as constants from '../lib/constants';
 
 import { getStepsFromStrategy } from './update-strategies';
 

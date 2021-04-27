@@ -1,5 +1,6 @@
-import blinking = require('blinking');
+import blinking = require('blinking'); // blinking is a 'coffee' module and can only be imported this way
+import * as constants from './constants';
 
-import constants = require('./constants');
+const blink = blinking(constants.ledFile);
 
-export = blinking(constants.ledFile);
+export default blink;

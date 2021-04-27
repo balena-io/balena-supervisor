@@ -27,7 +27,7 @@ import {
 	v2ServiceEndpointInputErrorMessage,
 } from '../lib/messages';
 import log from '../lib/supervisor-console';
-import supervisorVersion = require('../lib/supervisor-version');
+import supervisorVersion from '../lib/supervisor-version';
 import { checkInt, checkTruthy } from '../lib/validation';
 import { isVPNActive } from '../network';
 import { doPurge, doRestart, safeStateClone } from './common';

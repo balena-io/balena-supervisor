@@ -3,7 +3,7 @@ import * as _ from 'lodash';
 
 import { docker } from '../lib/docker-utils';
 import { InvalidAppIdError } from '../lib/errors';
-import logTypes = require('../lib/log-types');
+import * as logTypes from '../lib/log-types';
 import { checkInt } from '../lib/validation';
 import * as logger from '../logger';
 import * as ComposeUtils from './utils';

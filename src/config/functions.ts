@@ -4,7 +4,7 @@ import * as memoizee from 'memoizee';
 import { fs } from 'mz';
 import { URL } from 'url';
 
-import supervisorVersion = require('../lib/supervisor-version');
+import supervisorVersion from '../lib/supervisor-version';
 
 import * as config from '.';
 import * as constants from '../lib/constants';

@@ -19,7 +19,7 @@ import {
 import { loadTargetFromFile } from './device-state/preload';
 import * as globalEventBus from './event-bus';
 import * as hostConfig from './host-config';
-import constants = require('./lib/constants');
+import * as constants from './lib/constants';
 import * as dbus from './lib/dbus';
 import { InternalInconsistencyError, UpdatesLockedError } from './lib/errors';
 import * as updateLock from './lib/update-lock';
