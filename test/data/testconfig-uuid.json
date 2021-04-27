@@ -1,0 +1,17 @@
+
+{
+	"applicationId": 78373,
+	"deviceType": "raspberrypi3",
+	"appUpdatePollInterval": 3000,
+	"listenPort": 2345,
+	"vpnPort": 443,
+	"registryEndpoint": "registry2.balena-cloud.com",
+	"deltaEndpoint": "https://delta.balena-cloud.com",
+	"mixpanelToken": "baz",
+	"version": "2.0.6+rev3.prod",
+	"uuid": "ae982813c41eec2bd0a391ef268de5a6",
+	"apiEndpoint": "https://api.balena-cloud.com",
+	"registered_at": 1234889324,
+	"deviceId": 3,
+	"deviceApiKey": "SuperSecretKey"
+}

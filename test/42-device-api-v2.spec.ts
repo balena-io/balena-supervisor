@@ -361,13 +361,15 @@ describe('SupervisorAPI [V2 Endpoints]', () => {
 		});
 
 		it('should return 404 for an unknown service', async () => {
-			await request
-				.post(`/v2/applications/1658654/start-service?apikey=${appScopedKey}`)
-				.send({ serviceName: 'unknown' })
-				.set('Content-type', 'application/json')
-				.expect(404);
+			await mockedDockerode.testWithData({}, async () => {
+				await request
+					.post(`/v2/applications/1658654/start-service?apikey=${appScopedKey}`)
+					.send({ serviceName: 'unknown' })
+					.set('Content-type', 'application/json')
+					.expect(404);
 
-			expect(applicationManagerSpy).to.not.have.been.called;
+				expect(applicationManagerSpy).to.not.have.been.called;
+			});
 		});
 
 		it('should ignore locks and return 200', async () => {
@@ -465,12 +467,16 @@ describe('SupervisorAPI [V2 Endpoints]', () => {
 		});
 
 		it('should return 404 for an unknown service', async () => {
-			await request
-				.post(`/v2/applications/1658654/restart-service?apikey=${appScopedKey}`)
-				.send({ serviceName: 'unknown' })
-				.set('Content-type', 'application/json')
-				.expect(404);
-			expect(applicationManagerSpy).to.not.have.been.called;
+			await mockedDockerode.testWithData({}, async () => {
+				await request
+					.post(
+						`/v2/applications/1658654/restart-service?apikey=${appScopedKey}`,
+					)
+					.send({ serviceName: 'unknown' })
+					.set('Content-type', 'application/json')
+					.expect(404);
+				expect(applicationManagerSpy).to.not.have.been.called;
+			});
 		});
 
 		it('should return 423 for a service with update locks', async () => {

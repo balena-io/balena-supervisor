@@ -239,5 +239,12 @@ function objectNameForLogs(eventObj: LogEventObject): string | null {
 		return eventObj.fields.join(',');
 	}
 
+	if (eventObj.extensions != null) {
+		if (eventObj.extensions.length > 0) {
+			return eventObj.extensions.join(',');
+		}
+		return 'to OS defaults';
+	}
+
 	return null;
 }

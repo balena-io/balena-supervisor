@@ -42,31 +42,51 @@ export async function loadTargetFromFile(
 		const preloadState = stateFromFile as AppsJsonFormat;
 
 		let commitToPin: string | undefined;
-		let appToPin: string | undefined;
+		let appToPin: number | undefined;
 
 		if (_.isEmpty(preloadState)) {
 			return;
 		}
 
 		const imgs: Image[] = [];
-		const appIds = _.keys(preloadState.apps);
-		for (const appId of appIds) {
-			const app = preloadState.apps[appId];
+
+		const uuids = _.keys(preloadState.apps);
+
+		for (const uuid of uuids) {
+			const app = preloadState.apps[uuid];
+
 			// Multi-app warning!
 			// The following will need to be changed once running
 			// multiple applications is possible
 			commitToPin = app.commit;
-			appToPin = appId;
+			appToPin = app.appId;
 			const serviceIds = _.keys(app.services);
+
 			for (const serviceId of serviceIds) {
 				const service = app.services[serviceId];
+
+				const store = service.labels['io.balena.images.store'];
+				if (store && store !== 'data') {
+					// TODO: for now do not mark images outside the data engine store
+					// as supervised, since the supervisor only has support for a single
+					// engine
+					continue;
+				}
+
+				const cls = service.labels['io.balena.images.class'];
+				if (cls && cls === 'fileset') {
+					// ignore not supported fileset images
+					continue;
+				}
+
 				const svc = {
 					imageName: service.image,
 					serviceName: service.serviceName,
 					imageId: service.imageId,
 					serviceId: parseInt(serviceId, 10),
 					releaseId: app.releaseId,
-					appId: parseInt(appId, 10),
+					appId: app.appId,
+					uuid,
 				};
 				imgs.push(imageFromService(svc));
 			}
@@ -97,7 +117,7 @@ export async function loadTargetFromFile(
 				await config.set({
 					pinDevice: {
 						commit: commitToPin,
-						app: parseInt(appToPin, 10),
+						app: appToPin,
 					},
 				});
 			}

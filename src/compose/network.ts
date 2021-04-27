@@ -1,5 +1,6 @@
 import * as Bluebird from 'bluebird';
 import * as _ from 'lodash';
+import * as dockerode from 'dockerode';
 
 import { docker } from '../lib/docker-utils';
 import { InvalidAppIdError } from '../lib/errors';
@@ -8,13 +9,7 @@ import { checkInt } from '../lib/validation';
 import * as logger from '../logger';
 import * as ComposeUtils from './utils';
 
-import {
-	ComposeNetworkConfig,
-	DockerIPAMConfig,
-	DockerNetworkConfig,
-	NetworkConfig,
-	NetworkInspect,
-} from './types/network';
+import { ComposeNetworkConfig, NetworkConfig } from './types/network';
 
 import {
 	InvalidNetworkConfigurationError,
@@ -25,16 +20,21 @@ export class Network {
 	public appId: number;
 	public name: string;
 	public config: NetworkConfig;
+	public uuid?: string;
 
 	private constructor() {}
 
-	public static fromDockerNetwork(network: NetworkInspect): Network {
+	public static fromDockerNetwork(
+		network: dockerode.NetworkInspectInfo,
+	): Network {
 		const ret = new Network();
 
 		const match = network.Name.match(/^([0-9]+)_(.+)$/);
 		if (match == null) {
 			throw new InvalidNetworkNameError(network.Name);
 		}
+
+		// TODO: this seems uncessary with the regex above
 		const appId = checkInt(match[1]) || null;
 		if (!appId) {
 			throw new InvalidAppIdError(match[1]);
@@ -42,37 +42,30 @@ export class Network {
 
 		ret.appId = appId;
 		ret.name = match[2];
+
+		const config = network.IPAM?.Config || [];
+
 		ret.config = {
 			driver: network.Driver,
 			ipam: {
-				driver: network.IPAM.Driver,
-				config: _.map(network.IPAM.Config, (conf) => {
-					const newConf: NetworkConfig['ipam']['config'][0] = {};
-
-					if (conf.Subnet != null) {
-						newConf.subnet = conf.Subnet;
-					}
-					if (conf.Gateway != null) {
-						newConf.gateway = conf.Gateway;
-					}
-					if (conf.IPRange != null) {
-						newConf.ipRange = conf.IPRange;
-					}
-					if (conf.AuxAddress != null) {
-						newConf.auxAddress = conf.AuxAddress;
-					}
-
-					return newConf;
-				}),
-				options: network.IPAM.Options == null ? {} : network.IPAM.Options,
+				driver: network.IPAM?.Driver ?? 'default',
+				config: config.map((conf) => ({
+					...(conf.Subnet && { subnet: conf.Subnet }),
+					...(conf.Gateway && { gateway: conf.Gateway }),
+					...(conf.IPRange && { ipRange: conf.IPRange }),
+					...(conf.AuxAddress && { auxAddress: conf.AuxAddress }),
+				})),
+				options: network.IPAM?.Options ?? {},
 			},
 			enableIPv6: network.EnableIPv6,
 			internal: network.Internal,
-			labels: _.omit(ComposeUtils.normalizeLabels(network.Labels), [
+			labels: _.omit(ComposeUtils.normalizeLabels(network.Labels ?? {}), [
 				'io.balena.supervised',
 			]),
-			options: network.Options,
+			options: network.Options ?? {},
 		};
+
+		ret.uuid = ret.config.labels['io.balena.app-uuid'];
 
 		return ret;
 	}
@@ -80,6 +73,7 @@ export class Network {
 	public static fromComposeObject(
 		name: string,
 		appId: number,
+		uuid: string,
 		network: Partial<Omit<ComposeNetworkConfig, 'ipam'>> & {
 			ipam?: Partial<ComposeNetworkConfig['ipam']>;
 		},
@@ -90,26 +84,37 @@ export class Network {
 
 		Network.validateComposeConfig(network);
 
-		const ipam: Partial<ComposeNetworkConfig['ipam']> = network.ipam || {};
-		if (ipam.driver == null) {
-			ipam.driver = 'default';
-		}
-		if (ipam.config == null) {
-			ipam.config = [];
-		}
-		if (ipam.options == null) {
-			ipam.options = {};
-		}
+		const ipam = network.ipam ?? {};
+		const driver = ipam.driver ?? 'default';
+		const config = ipam.config ?? [];
+		const options = ipam.options ?? {};
+
 		net.config = {
 			driver: network.driver || 'bridge',
-			ipam: ipam as ComposeNetworkConfig['ipam'],
+			ipam: {
+				driver,
+				config: config.map((conf) => ({
+					...(conf.subnet && { subnet: conf.subnet }),
+					...(conf.gateway && { gateway: conf.gateway }),
+					...(conf.ip_range && { ipRange: conf.ip_range }),
+					// TODO: compose defines aux_addresses as a dict but dockerode and the
+					// engine accepts a single AuxAddress. What happens when multiple addresses
+					// are given?
+					...(conf.aux_addresses && { auxAddress: conf.aux_addresses }),
+				})) as ComposeNetworkConfig['ipam']['config'],
+				options,
+			},
 			enableIPv6: network.enable_ipv6 || false,
 			internal: network.internal || false,
 			labels: network.labels || {},
 			options: network.driver_opts || {},
 		};
 
-		net.config.labels = ComposeUtils.normalizeLabels(net.config.labels);
+		net.config.labels = {
+			...ComposeUtils.normalizeLabels(net.config.labels),
+			'io.balena.app-uuid': uuid,
+		};
+		net.uuid = uuid;
 
 		return net;
 	}
@@ -130,31 +135,23 @@ export class Network {
 			network: { name: this.name },
 		});
 
-		return await docker.createNetwork(this.toDockerConfig());
+		await docker.createNetwork(this.toDockerConfig());
 	}
 
-	public toDockerConfig(): DockerNetworkConfig {
+	public toDockerConfig(): dockerode.NetworkCreateOptions {
 		return {
 			Name: Network.generateDockerName(this.appId, this.name),
 			Driver: this.config.driver,
 			CheckDuplicate: true,
 			IPAM: {
 				Driver: this.config.ipam.driver,
-				Config: _.map(this.config.ipam.config, (conf) => {
-					const ipamConf: DockerIPAMConfig = {};
-					if (conf.subnet != null) {
-						ipamConf.Subnet = conf.subnet;
-					}
-					if (conf.gateway != null) {
-						ipamConf.Gateway = conf.gateway;
-					}
-					if (conf.auxAddress != null) {
-						ipamConf.AuxAddress = conf.auxAddress;
-					}
-					if (conf.ipRange != null) {
-						ipamConf.IPRange = conf.ipRange;
-					}
-					return ipamConf;
+				Config: this.config.ipam.config.map((conf) => {
+					return {
+						...(conf.subnet && { Subnet: conf.subnet }),
+						...(conf.gateway && { Gateway: conf.gateway }),
+						...(conf.auxAddress && { AuxAddress: conf.auxAddress }),
+						...(conf.ipRange && { IPRange: conf.ipRange }),
+					};
 				}),
 				Options: this.config.ipam.options,
 			},
@@ -199,13 +196,18 @@ export class Network {
 		// in the target state (as it will be present in the
 		// current state, due to docker populating it with
 		// default or generated values)
-		let configToCompare = this.config;
-		if (network.config.ipam.config.length === 0) {
-			configToCompare = _.cloneDeep(this.config);
+		const configToCompare = { ...this.config };
+		const otherConfig = { ...network.config };
+		if (otherConfig.ipam.config.length === 0) {
 			configToCompare.ipam.config = [];
 		}
 
-		return _.isEqual(configToCompare, network.config);
+		configToCompare.labels = _.omit(configToCompare.labels, [
+			'io.balena.app-uuid',
+		]);
+		otherConfig.labels = _.omit(otherConfig.labels, ['io.balena.app-uuid']);
+
+		return _.isEqual(configToCompare, otherConfig);
 	}
 
 	private static validateComposeConfig(

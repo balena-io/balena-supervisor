@@ -28,6 +28,7 @@ export class Volume {
 		public name: string,
 		public appId: number,
 		public config: VolumeConfig,
+		public uuid?: string,
 	) {}
 
 	public static fromDockerVolume(inspect: Docker.VolumeInspectInfo): Volume {
@@ -40,13 +41,15 @@ export class Volume {
 
 		// Detect the name and appId from the inspect data
 		const { name, appId } = this.deconstructDockerName(inspect.Name);
+		const uuid = config.labels['io.balena.app-uuid'];
 
-		return new Volume(name, appId, config);
+		return new Volume(name, appId, config, uuid);
 	}
 
 	public static fromComposeObject(
 		name: string,
 		appId: number,
+		uuid: string,
 		config: Partial<ComposeVolumeConfig>,
 	) {
 		const filledConfig: VolumeConfig = {
@@ -57,9 +60,14 @@ export class Volume {
 
 		// We only need to assign the labels here, as when we
 		// get it from the daemon, they should already be there
+		filledConfig.labels = {
+			...filledConfig.labels,
+			...constants.defaultVolumeLabels,
+			'io.balena.app-uuid': uuid,
+		};
 		assign(filledConfig.labels, constants.defaultVolumeLabels);
 
-		return new Volume(name, appId, filledConfig);
+		return new Volume(name, appId, filledConfig, uuid);
 	}
 
 	public toComposeObject(): ComposeVolumeConfig {
@@ -85,12 +93,16 @@ export class Volume {
 		logger.logSystemEvent(LogTypes.createVolume, {
 			volume: { name: this.name },
 		});
-		await docker.createVolume({
+		await docker.createVolume(this.toDockerVolume());
+	}
+
+	public toDockerVolume() {
+		return {
 			Name: Volume.generateDockerName(this.appId, this.name),
 			Labels: this.config.labels,
 			Driver: this.config.driver,
 			DriverOpts: this.config.driverOpts,
-		});
+		};
 	}
 
 	public async remove(): Promise<void> {
@@ -139,9 +151,12 @@ export class Volume {
 
 	private static omitSupervisorLabels(labels: LabelObject): LabelObject {
 		// TODO: Export these to a constant
-		return omitBy(
-			labels,
-			(_v, k) => k === 'io.resin.supervised' || k === 'io.balena.supervised',
+		return omitBy(labels, (_v, k) =>
+			[
+				'io.resin.supervised',
+				'io.balena.supervised',
+				'io.balena.app-uuid',
+			].includes(k),
 		);
 	}
 }

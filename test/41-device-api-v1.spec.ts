@@ -73,6 +73,7 @@ describe('SupervisorAPI [V1 Endpoints]', () => {
 	afterEach(() => {
 		// Clear Dockerode actions recorded for each test
 		mockedDockerode.resetHistory();
+		appMock.unmockAll();
 	});
 
 	before(async () => {
@@ -120,7 +121,6 @@ describe('SupervisorAPI [V1 Endpoints]', () => {
 		healthCheckStubs.forEach((hc) => hc.restore());
 		// Remove any test data generated
 		await mockedAPI.cleanUp();
-		appMock.unmockAll();
 		targetStateCacheMock.restore();
 		loggerStub.restore();
 	});
@@ -213,7 +213,6 @@ describe('SupervisorAPI [V1 Endpoints]', () => {
 
 	describe('GET /v1/apps/:appId', () => {
 		it('does not return information for an application when there is more than 1 container', async () => {
-			// Every test case in this suite has a 3 service release mocked so just make the request
 			await request
 				.get('/v1/apps/2')
 				.set('Accept', 'application/json')
@@ -236,32 +235,39 @@ describe('SupervisorAPI [V1 Endpoints]', () => {
 			});
 			appMock.mockManagers([container], [], []);
 			appMock.mockImages([], false, [image]);
-			// Make request
-			await request
-				.get('/v1/apps/2')
-				.set('Accept', 'application/json')
-				.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
-				.expect(sampleResponses.V1.GET['/apps/2'].statusCode)
-				.expect('Content-Type', /json/)
-				.then((response) => {
-					expect(response.body).to.deep.equal(
-						sampleResponses.V1.GET['/apps/2'].body,
-					);
-				});
+			await mockedDockerode.testWithData(
+				{ containers: [container], images: [image] },
+				async () => {
+					// Make request
+					await request
+						.get('/v1/apps/2')
+						.set('Accept', 'application/json')
+						.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
+						.expect(sampleResponses.V1.GET['/apps/2'].statusCode)
+						.expect('Content-Type', /json/)
+						.then((response) => {
+							expect(response.body).to.deep.equal(
+								sampleResponses.V1.GET['/apps/2'].body,
+							);
+						});
+				},
+			);
 		});
 	});
 
 	describe('POST /v1/apps/:appId/stop', () => {
 		it('does not allow stopping an application when there is more than 1 container', async () => {
 			// Every test case in this suite has a 3 service release mocked so just make the request
-			await request
-				.post('/v1/apps/2/stop')
-				.set('Accept', 'application/json')
-				.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
-				.expect(
-					sampleResponses.V1.GET['/apps/2/stop [Multiple containers running]']
-						.statusCode,
-				);
+			await mockedDockerode.testWithData({ containers, images }, async () => {
+				await request
+					.post('/v1/apps/2/stop')
+					.set('Accept', 'application/json')
+					.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
+					.expect(
+						sampleResponses.V1.GET['/apps/2/stop [Multiple containers running]']
+							.statusCode,
+					);
+			});
 		});
 
 		it('stops a SPECIFIC application and returns a containerId', async () => {
@@ -298,11 +304,13 @@ describe('SupervisorAPI [V1 Endpoints]', () => {
 	describe('POST /v1/apps/:appId/start', () => {
 		it('does not allow starting an application when there is more than 1 container', async () => {
 			// Every test case in this suite has a 3 service release mocked so just make the request
-			await request
-				.post('/v1/apps/2/start')
-				.set('Accept', 'application/json')
-				.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
-				.expect(400);
+			await mockedDockerode.testWithData({ containers, images }, async () => {
+				await request
+					.post('/v1/apps/2/start')
+					.set('Accept', 'application/json')
+					.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
+					.expect(400);
+			});
 		});
 
 		it('starts a SPECIFIC application and returns a containerId', async () => {
@@ -387,14 +395,19 @@ describe('SupervisorAPI [V1 Endpoints]', () => {
 			appMock.mockManagers([container], [], []);
 			appMock.mockImages([], false, [image]);
 
-			const response = await request
-				.post('/v1/reboot')
-				.set('Accept', 'application/json')
-				.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
-				.expect(202);
+			await mockedDockerode.testWithData(
+				{ containers: [container], images: [image] },
+				async () => {
+					const response = await request
+						.post('/v1/reboot')
+						.set('Accept', 'application/json')
+						.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
+						.expect(202);
 
-			expect(response.body).to.have.property('Data').that.is.not.empty;
-			expect(rebootMock).to.have.been.calledOnce;
+					expect(response.body).to.have.property('Data').that.is.not.empty;
+					expect(rebootMock).to.have.been.calledOnce;
+				},
+			);
 		});
 
 		it('should return 423 and reject the reboot if no locks are set', async () => {
@@ -417,15 +430,20 @@ describe('SupervisorAPI [V1 Endpoints]', () => {
 			appMock.mockManagers([container], [], []);
 			appMock.mockImages([], false, [image]);
 
-			const response = await request
-				.post('/v1/reboot')
-				.set('Accept', 'application/json')
-				.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
-				.expect(423);
+			await mockedDockerode.testWithData(
+				{ containers: [container], images: [image] },
+				async () => {
+					const response = await request
+						.post('/v1/reboot')
+						.set('Accept', 'application/json')
+						.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
+						.expect(423);
 
-			expect(updateLock.lock).to.be.calledOnce;
-			expect(response.body).to.have.property('Error').that.is.not.empty;
-			expect(rebootMock).to.not.have.been.called;
+					expect(updateLock.lock).to.be.calledOnce;
+					expect(response.body).to.have.property('Error').that.is.not.empty;
+					expect(rebootMock).to.not.have.been.called;
+				},
+			);
 
 			(updateLock.lock as SinonStub).restore();
 		});
@@ -450,16 +468,21 @@ describe('SupervisorAPI [V1 Endpoints]', () => {
 			appMock.mockManagers([container], [], []);
 			appMock.mockImages([], false, [image]);
 
-			const response = await request
-				.post('/v1/reboot')
-				.send({ force: true })
-				.set('Accept', 'application/json')
-				.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
-				.expect(202);
+			await mockedDockerode.testWithData(
+				{ containers: [container], images: [image] },
+				async () => {
+					const response = await request
+						.post('/v1/reboot')
+						.send({ force: true })
+						.set('Accept', 'application/json')
+						.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
+						.expect(202);
 
-			expect(updateLock.lock).to.be.calledOnce;
-			expect(response.body).to.have.property('Data').that.is.not.empty;
-			expect(rebootMock).to.have.been.calledOnce;
+					expect(updateLock.lock).to.be.calledOnce;
+					expect(response.body).to.have.property('Data').that.is.not.empty;
+					expect(rebootMock).to.have.been.calledOnce;
+				},
+			);
 
 			(updateLock.lock as SinonStub).restore();
 		});
@@ -488,14 +511,19 @@ describe('SupervisorAPI [V1 Endpoints]', () => {
 			appMock.mockManagers([container], [], []);
 			appMock.mockImages([], false, [image]);
 
-			const response = await request
-				.post('/v1/shutdown')
-				.set('Accept', 'application/json')
-				.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
-				.expect(202);
+			await mockedDockerode.testWithData(
+				{ containers: [container], images: [image] },
+				async () => {
+					const response = await request
+						.post('/v1/shutdown')
+						.set('Accept', 'application/json')
+						.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
+						.expect(202);
 
-			expect(response.body).to.have.property('Data').that.is.not.empty;
-			expect(shutdownMock).to.have.been.calledOnce;
+					expect(response.body).to.have.property('Data').that.is.not.empty;
+					expect(shutdownMock).to.have.been.calledOnce;
+				},
+			);
 
 			shutdownMock.resetHistory();
 		});
@@ -520,15 +548,20 @@ describe('SupervisorAPI [V1 Endpoints]', () => {
 			appMock.mockManagers([container], [], []);
 			appMock.mockImages([], false, [image]);
 
-			const response = await request
-				.post('/v1/shutdown')
-				.set('Accept', 'application/json')
-				.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
-				.expect(423);
+			await mockedDockerode.testWithData(
+				{ containers: [container], images: [image] },
+				async () => {
+					const response = await request
+						.post('/v1/shutdown')
+						.set('Accept', 'application/json')
+						.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
+						.expect(423);
 
-			expect(updateLock.lock).to.be.calledOnce;
-			expect(response.body).to.have.property('Error').that.is.not.empty;
-			expect(shutdownMock).to.not.have.been.called;
+					expect(updateLock.lock).to.be.calledOnce;
+					expect(response.body).to.have.property('Error').that.is.not.empty;
+					expect(shutdownMock).to.not.have.been.called;
+				},
+			);
 
 			(updateLock.lock as SinonStub).restore();
 		});
@@ -553,16 +586,21 @@ describe('SupervisorAPI [V1 Endpoints]', () => {
 			appMock.mockManagers([container], [], []);
 			appMock.mockImages([], false, [image]);
 
-			const response = await request
-				.post('/v1/shutdown')
-				.send({ force: true })
-				.set('Accept', 'application/json')
-				.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
-				.expect(202);
+			await mockedDockerode.testWithData(
+				{ containers: [container], images: [image] },
+				async () => {
+					const response = await request
+						.post('/v1/shutdown')
+						.send({ force: true })
+						.set('Accept', 'application/json')
+						.set('Authorization', `Bearer ${apiKeys.cloudApiKey}`)
+						.expect(202);
 
-			expect(updateLock.lock).to.be.calledOnce;
-			expect(response.body).to.have.property('Data').that.is.not.empty;
-			expect(shutdownMock).to.have.been.calledOnce;
+					expect(updateLock.lock).to.be.calledOnce;
+					expect(response.body).to.have.property('Data').that.is.not.empty;
+					expect(shutdownMock).to.have.been.calledOnce;
+				},
+			);
 
 			(updateLock.lock as SinonStub).restore();
 		});

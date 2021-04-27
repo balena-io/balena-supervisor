@@ -578,10 +578,18 @@ export async function getStatus(): Promise<DeviceStatus> {
 	// at that point we can filter non-system apps leaving a single user app.
 	// After this, for true multi-app, we will need to report our status back in a
 	// different way, meaning this function will no longer be needed
+
+	// TODO: in tri-app, we need to filter first the user app from the host and supervisor apps
+	// on the to get the correct user app id
+	// After this, for true multi-app, we will need to report our status back in a
+	// different way, meaning this function will no longer be needed
 	const appIds = Object.keys(theState.local!.apps).map((strId) =>
+		// TODO: this doesn't work with app UUIDS
 		parseInt(strId, 10),
 	);
 
+	// TODO: in tri-app the user app needs to be identified in a different way that through
+	// the array index
 	const appId: number | undefined = appIds[0];
 	if (appId != null) {
 		const commit = await commitStore.getCommitForApp(appId);

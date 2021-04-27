@@ -54,14 +54,19 @@ describe('Compose volumes', () => {
 		});
 
 		it('should correctly parse compose volumes without an explicit driver', () => {
-			const volume = Volume.fromComposeObject('one_volume', 1032480, {
-				driver_opts: {
-					opt1: 'test',
+			const volume = Volume.fromComposeObject(
+				'one_volume',
+				1032480,
+				'test-uuid',
+				{
+					driver_opts: {
+						opt1: 'test',
+					},
+					labels: {
+						'my-label': 'test-label',
+					},
 				},
-				labels: {
-					'my-label': 'test-label',
-				},
-			});
+			);
 
 			expect(volume).to.have.property('appId').that.equals(1032480);
 			expect(volume).to.have.property('name').that.equals('one_volume');
@@ -71,6 +76,7 @@ describe('Compose volumes', () => {
 				.that.deep.equals({
 					'io.balena.supervised': 'true',
 					'my-label': 'test-label',
+					'io.balena.app-uuid': 'test-uuid',
 				});
 			expect(volume)
 				.to.have.property('config')
@@ -85,15 +91,20 @@ describe('Compose volumes', () => {
 		});
 
 		it('should correctly parse compose volumes with an explicit driver', () => {
-			const volume = Volume.fromComposeObject('one_volume', 1032480, {
-				driver: 'other',
-				driver_opts: {
-					opt1: 'test',
+			const volume = Volume.fromComposeObject(
+				'one_volume',
+				1032480,
+				'test-uuid',
+				{
+					driver: 'other',
+					driver_opts: {
+						opt1: 'test',
+					},
+					labels: {
+						'my-label': 'test-label',
+					},
 				},
-				labels: {
-					'my-label': 'test-label',
-				},
-			});
+			);
 
 			expect(volume).to.have.property('appId').that.equals(1032480);
 			expect(volume).to.have.property('name').that.equals('one_volume');
@@ -103,6 +114,7 @@ describe('Compose volumes', () => {
 				.that.deep.equals({
 					'io.balena.supervised': 'true',
 					'my-label': 'test-label',
+					'io.balena.app-uuid': 'test-uuid',
 				});
 			expect(volume)
 				.to.have.property('config')
@@ -124,14 +136,19 @@ describe('Compose volumes', () => {
 			logMessageStub.reset();
 		});
 		it('should correctly generate docker options', async () => {
-			const volume = Volume.fromComposeObject('one_volume', 1032480, {
-				driver_opts: {
-					opt1: 'test',
+			const volume = Volume.fromComposeObject(
+				'one_volume',
+				1032480,
+				'test-uuid',
+				{
+					driver_opts: {
+						opt1: 'test',
+					},
+					labels: {
+						'my-label': 'test-label',
+					},
 				},
-				labels: {
-					'my-label': 'test-label',
-				},
-			});
+			);
 
 			await volume.create();
 			expect(
@@ -139,6 +156,7 @@ describe('Compose volumes', () => {
 					Labels: {
 						'my-label': 'test-label',
 						'io.balena.supervised': 'true',
+						'io.balena.app-uuid': 'test-uuid',
 					},
 					Options: {
 						opt1: 'test',

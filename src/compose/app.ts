@@ -32,8 +32,9 @@ export interface AppConstructOpts {
 	appName?: string;
 	commit?: string;
 	releaseId?: number;
+	releaseVersion?: string;
 	source?: string;
-
+	uuid?: string;
 	services: Service[];
 	volumes: Dictionary<Volume>;
 	networks: Dictionary<Network>;
@@ -57,7 +58,9 @@ export class App {
 	public appName?: string;
 	public commit?: string;
 	public releaseId?: number;
+	public releaseVersion?: string;
 	public source?: string;
+	public uuid?: string;
 
 	// Services are stored as an array, as at any one time we could have more than one
 	// service for a single service ID running (for example handover)
@@ -70,16 +73,20 @@ export class App {
 		this.appName = opts.appName;
 		this.commit = opts.commit;
 		this.releaseId = opts.releaseId;
+		this.releaseVersion = opts.releaseVersion;
 		this.source = opts.source;
 		this.services = opts.services;
 		this.volumes = opts.volumes;
 		this.networks = opts.networks;
+		this.uuid = opts.uuid;
 
 		if (this.networks.default == null && isTargetState) {
 			// We always want a default network
 			this.networks.default = Network.fromComposeObject(
 				'default',
 				opts.appId,
+				// Target state always has a uuid set
+				opts.uuid!,
 				{},
 			);
 		}
@@ -162,12 +169,12 @@ export class App {
 			),
 		);
 
+		// TODO: remove this when the updateCommit table disappears
 		if (
 			steps.length === 0 &&
 			target.commit != null &&
 			this.commit !== target.commit
 		) {
-			// TODO: The next PR should change this to support multiapp commit values
 			steps.push(
 				generateStep('updateCommit', {
 					target: target.commit,
@@ -266,6 +273,10 @@ export class App {
 		removePairs: Array<ChangingPair<Service>>;
 		updatePairs: Array<ChangingPair<Service>>;
 	} {
+		// TODO: This is comparing by service id, so changing environment will forcibly
+		// trigger a reinstall of the services, an since image names are also
+		// different it will also trigger a fetch
+		// comparison should probably be done using serviceName as with docker compose
 		const currentByServiceId = _.keyBy(current, 'serviceId');
 		const targetByServiceId = _.keyBy(target, 'serviceId');
 
@@ -751,13 +762,13 @@ export class App {
 			if (conf.labels == null) {
 				conf.labels = {};
 			}
-			return Volume.fromComposeObject(name, app.appId, conf);
+			return Volume.fromComposeObject(name, app.appId, app.uuid, conf);
 		});
 
 		const networks = _.mapValues(
 			JSON.parse(app.networks) ?? {},
 			(conf, name) => {
-				return Network.fromComposeObject(name, app.appId, conf ?? {});
+				return Network.fromComposeObject(name, app.appId, app.uuid, conf ?? {});
 			},
 		);
 
@@ -813,6 +824,9 @@ export class App {
 						serviceName: svc.serviceName,
 					};
 
+					// TODO: modify target state with new uuid and releaseVersion labels so
+					// a container restart is triggered
+
 					// FIXME: Typings for DeviceMetadata
 					return await Service.fromComposeObject(
 						svc,
@@ -821,13 +835,18 @@ export class App {
 				},
 			),
 		);
+
 		return new App(
 			{
 				appId: app.appId,
 				commit: app.commit,
 				releaseId: app.releaseId,
+				// Release version defaults to commit if no version
+				// has been defined by the user
+				releaseVersion: app.releaseVersion ?? app.commit,
 				appName: app.name,
 				source: app.source,
+				uuid: app.uuid,
 				services,
 				volumes,
 				networks,

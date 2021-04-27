@@ -59,12 +59,30 @@ const volatileState: Dictionary<Partial<Service>> = {};
 export const getAll = async (
 	extraLabelFilters: string | string[] = [],
 ): Promise<Service[]> => {
-	const filterLabels = ['supervised'].concat(extraLabelFilters);
-	const containers = await listWithBothLabels(filterLabels);
+	// From balenaOS v3 containers will be created from multiple locations
+	// (preloaded in the OS, start-resin-supervisor script). All of these
+	// containers will be required to provide an app-uuid so is a good time to
+	// phase out the 'supervised' label. On the next major release after the
+	// v3 supervisor, this code should be removed
+	const legacyLabels = ['supervised'].concat(extraLabelFilters);
+	const filterLabels = ['app-uuid'].concat(extraLabelFilters);
+	const containers = _.unionBy(
+		await listWithBothLabels(legacyLabels),
+		await listWithBothLabels(filterLabels),
+		'Id',
+	);
 
-	const services = await Bluebird.map(containers, async (container) => {
+	// Get only containers with class service
+	const serviceContainers = containers.filter(
+		(container) =>
+			!container.Labels['io.balena.image.class'] ||
+			container.Labels['io.balena.image.class'] === 'service',
+	);
+
+	const services = await Bluebird.map(serviceContainers, async (container) => {
 		try {
-			const serviceInspect = await docker.getContainer(container.Id).inspect();
+			const containerInfo = docker.getContainer(container.Id);
+			const serviceInspect = await containerInfo.inspect();
 			const service = Service.fromDockerContainer(serviceInspect);
 			// We know that the containerId is set below, because `fromDockerContainer`
 			// always sets it
@@ -133,10 +151,18 @@ export async function getByDockerContainerId(
 	containerId: string,
 ): Promise<Service | null> {
 	const container = await docker.getContainer(containerId).inspect();
-	if (
-		container.Config.Labels['io.balena.supervised'] == null &&
-		container.Config.Labels['io.resin.supervised'] == null
-	) {
+
+	const { Labels } = container.Config;
+	const isSupervised =
+		!!Labels['io.balena.supervised'] ||
+		!!Labels['io.resin.supervised'] ||
+		!!Labels['io.balena.app-uuid'];
+
+	const isService =
+		!Labels['io.balena.image.class'] ||
+		Labels['io.balena.image.class'] === 'service';
+
+	if (!isSupervised || !isService) {
 		return null;
 	}
 	return Service.fromDockerContainer(container);

@@ -16,7 +16,7 @@ interface Opts {
 
 export async function initDevice(opts: Opts) {
 	const arch = opts.arch ?? (await device.getDeviceArch(opts.docker));
-	const image = `${opts.imageName}:${opts.imageTag}`;
+	const image = `${opts.imageName}-${opts.imageTag}`;
 
 	await device.performBuild(opts.docker, opts.dockerfile, {
 		buildargs: { ARCH: arch },
@@ -31,11 +31,7 @@ export async function initDevice(opts: Opts) {
 	// /tmp/update-supervisor.conf with our version, and
 	// restart the supervisor
 	await device.stopSupervisor(opts.address);
-	await device.replaceSupervisorImage(
-		opts.address,
-		opts.imageName,
-		opts.imageTag,
-	);
+	await device.replaceSupervisorImage(opts.address, image, 'latest');
 	await device.startSupervisor(opts.address);
 
 	let supervisorContainer: undefined | Docker.ContainerInfo;

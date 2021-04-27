@@ -25,8 +25,8 @@ import * as imageManager from './images';
 import type { Image } from './images';
 import { getExecutors, CompositionStepT } from './composition-steps';
 import * as commitStore from './commit';
-
 import Service from './service';
+import * as hostExt from './host-extension';
 
 import { createV1Api } from '../device-api/v1';
 import { createV2Api } from '../device-api/v2';
@@ -41,6 +41,8 @@ import { checkTruthy, checkInt } from '../lib/validation';
 import { Proxyvisor } from '../proxyvisor';
 import * as updateLock from '../lib/update-lock';
 import { EventEmitter } from 'events';
+import Network from './network';
+import Volume from './volume';
 
 type ApplicationManagerEventEmitter = StrictEventEmitter<
 	EventEmitter,
@@ -192,12 +194,29 @@ export async function getRequiredSteps(
 		imageManager.getAvailable(),
 		getCurrentApps(),
 	]);
+
+	// TODO: host extensios are no longer apps so checking has to go on the services
+	// side
+	// First we check if we need to install any host extensions, as these should
+	// happen first
+	// const hostExtensions = _.pickBy(targetApps, { type: 'hostapp extension' });
+	// const extensionSteps = await hostExt.getRequiredSteps(
+	// 	hostExtensions,
+	// 	availableImages,
+	// 	downloading,
+	// );
+
+	// if (extensionSteps.length !== 0) {
+	// 	return extensionSteps;
+	// }
+
 	const containerIdsByAppId = await getAppContainerIds(currentApps);
 
 	if (localMode) {
 		ignoreImages = localMode;
 	}
 
+	// targetApps = _.pickBy(targetApps, { type: 'supervised' });
 	const currentAppIds = Object.keys(currentApps).map((i) => parseInt(i, 10));
 	const targetAppIds = Object.keys(targetApps).map((i) => parseInt(i, 10));
 
@@ -234,6 +253,7 @@ export async function getRequiredSteps(
 
 		// We want to remove images before moving on to anything else
 		if (steps.length === 0) {
+			// TODO: this should be comparing by uuid if available
 			const targetAndCurrent = _.intersection(currentAppIds, targetAppIds);
 			const onlyTarget = _.difference(targetAppIds, currentAppIds);
 			const onlyCurrent = _.difference(currentAppIds, targetAppIds);
@@ -242,7 +262,7 @@ export async function getRequiredSteps(
 			// do to move to the target state
 			for (const id of targetAndCurrent) {
 				steps = steps.concat(
-					await currentApps[id].nextStepsForAppUpdate(
+					currentApps[id].nextStepsForAppUpdate(
 						{
 							localMode,
 							availableImages,
@@ -268,10 +288,11 @@ export async function getRequiredSteps(
 			// For apps in the target state but not the current state, we generate steps to
 			// create the app by mocking an existing app which contains nothing
 			for (const id of onlyTarget) {
-				const { appId } = targetApps[id];
+				const { appId, uuid } = targetApps[id];
 				const emptyCurrent = new App(
 					{
 						appId,
+						uuid,
 						services: [],
 						volumes: {},
 						networks: {},
@@ -368,33 +389,146 @@ export async function getCurrentAppsForReport(): Promise<
 	return appsToReport;
 }
 
+// The following two function may look pretty odd, but after the move to uuids,
+// there's a chance that the current running apps don't have a uuid set. We
+// still need to be able to work on these and perform various state changes. To
+// do this we try to use the UUID to group the components, and if that isn't
+// available we revert to using the appIds instead
 export async function getCurrentApps(): Promise<InstancedAppState> {
-	const volumes = _.groupBy(await volumeManager.getAll(), 'appId');
-	const networks = _.groupBy(await networkManager.getAll(), 'appId');
-	const services = _.groupBy(await serviceManager.getAll(), 'appId');
-
-	const allAppIds = _.union(
-		Object.keys(volumes),
-		Object.keys(networks),
-		Object.keys(services),
-	).map((i) => parseInt(i, 10));
+	const componentGroups = groupComponents(
+		await serviceManager.getAll(),
+		await networkManager.getAll(),
+		await volumeManager.getAll(),
+	);
 
 	const apps: InstancedAppState = {};
-	for (const appId of allAppIds) {
+	for (const strAppId of Object.keys(componentGroups)) {
+		const appId = parseInt(strAppId, 10);
+
+		// TODO: get commit and release version from container
 		const commit = await commitStore.getCommitForApp(appId);
-		apps[appId] = new App(
-			{
-				appId,
-				services: services[appId] ?? [],
-				networks: _.keyBy(networks[appId], 'name'),
-				volumes: _.keyBy(volumes[appId], 'name'),
-				commit,
-			},
-			false,
-		);
+
+		const components = componentGroups[appId];
+
+		// fetch the correct uuid from any component within the appId
+		const uuid = [
+			components.services[0]?.uuid,
+			components.volumes[0]?.uuid,
+			components.networks[0]?.uuid,
+		]
+			.filter((u) => u != null)
+			.shift()!;
+
+		// If we don't have any components for this app, ignore it (this can
+		// actually happen when moving between backends but maintaining UUIDs)
+		if (
+			!_.isEmpty(components.services) ||
+			!_.isEmpty(components.volumes) ||
+			!_.isEmpty(components.networks)
+		) {
+			apps[appId] = new App(
+				{
+					appId,
+					uuid,
+					commit,
+					services: componentGroups[appId].services,
+					networks: _.keyBy(componentGroups[appId].networks, 'name'),
+					volumes: _.keyBy(componentGroups[appId].volumes, 'name'),
+				},
+				false,
+			);
+		}
 	}
 
 	return apps;
+}
+
+interface AppGroup {
+	[appId: number]: {
+		services: Service[];
+		volumes: Volume[];
+		networks: Network[];
+	};
+}
+
+function groupComponents(
+	services: Service[],
+	networks: Network[],
+	volumes: Volume[],
+): AppGroup {
+	const grouping: AppGroup = {};
+
+	const everyComponent: [{ uuid?: string; appId: number }] = [
+		...services,
+		...networks,
+		...volumes,
+	] as any;
+
+	const allUuids: string[] = [];
+	const allAppIds: number[] = [];
+	everyComponent.forEach(({ appId, uuid }) => {
+		// Pre-populate the groupings
+		grouping[appId] = {
+			services: [],
+			networks: [],
+			volumes: [],
+		};
+		// Save all the uuids for later
+		if (uuid != null) {
+			allUuids.push(uuid);
+		}
+		allAppIds.push(appId);
+	});
+
+	// First we try to group everything by it's uuid, but if any component does
+	// not have a uuid, we fall back to the old appId style
+	if (everyComponent.length === allUuids.length) {
+		const uuidGroups: { [uuid: string]: AppGroup[0] } = {};
+		_.uniq(allUuids).forEach((uuid) => {
+			const uuidServices = services.filter(({ uuid: sUuid }) => uuid === sUuid);
+			const uuidVolumes = volumes.filter(({ uuid: vUuid }) => uuid === vUuid);
+			const uuidNetworks = networks.filter(({ uuid: nUuid }) => uuid === nUuid);
+
+			uuidGroups[uuid] = {
+				services: uuidServices,
+				networks: uuidNetworks,
+				volumes: uuidVolumes,
+			};
+		});
+
+		for (const uuid of Object.keys(uuidGroups)) {
+			// There's a chance that the uuid and the appId is different, and this
+			// is fine. Unfortunately we have no way of knowing which is the "real"
+			// appId (that is the app id which relates to the currently joined
+			// backend) so we instead just choose the first and add everything to that
+			const appId =
+				uuidGroups[uuid].services[0]?.appId ||
+				uuidGroups[uuid].networks[0]?.appId ||
+				uuidGroups[uuid].volumes[0]?.appId;
+			grouping[appId] = uuidGroups[uuid];
+		}
+	} else {
+		// Otherwise group them by appId and let the state engine match them later.
+		// This will only happen once, as every target state going forward will
+		// contain UUIDs, we just need to handle the initial upgrade
+		const appSvcs = _.groupBy(services, 'appId');
+		const appVols = _.groupBy(volumes, 'appId');
+		const appNets = _.groupBy(networks, 'appId');
+
+		_.uniq(allAppIds).forEach((appId) => {
+			grouping[appId].services = grouping[appId].services.concat(
+				appSvcs[appId] || [],
+			);
+			grouping[appId].networks = grouping[appId].networks.concat(
+				appNets[appId] || [],
+			);
+			grouping[appId].volumes = grouping[appId].volumes.concat(
+				appVols[appId] || [],
+			);
+		});
+	}
+
+	return grouping;
 }
 
 function killServicesUsingApi(current: InstancedAppState): CompositionStep[] {
@@ -466,7 +600,11 @@ export async function setTarget(
 				// Currently this will only happen if the release
 				// which would replace it fails a contract
 				// validation check
-				_.map(apps, (_v, appId) => checkInt(appId)),
+				_.map(apps, (a) => checkInt(a.appId)),
+			)
+			.whereNotIn(
+				'uuid',
+				_.map(apps, (_a, uuid) => uuid),
 			)
 			.del();
 		await proxyvisor.setTargetInTransaction(dependent, trx);
@@ -658,10 +796,13 @@ function saveAndRemoveImages(
 				}) ?? _.find(availableImages, { dockerImageId: svc.config.image }),
 		),
 	) as imageManager.Image[];
+
+	// console.log('target: ', JSON.stringify(target, null, 2));
 	const targetImages = _.flatMap(target, (app) =>
 		_.map(app.services, imageForService),
 	);
 
+	// console.log('targetImages', targetImages);
 	const availableAndUnused = _.filter(
 		availableImages,
 		(image) =>
@@ -732,6 +873,7 @@ function saveAndRemoveImages(
 					name: proxyvisorImage,
 				}),
 			);
+			// TODO: possibly add hostapps and supervisor to these filter
 			return notUsedForDelta && notUsedByProxyvisor;
 		},
 	);
@@ -784,16 +926,22 @@ export async function getStatus() {
 	// We iterate over the current running services and add them to the current state
 	// of the app they belong to.
 	for (const service of services) {
-		const { appId, imageId } = service;
-		if (!appId) {
+		const { appId, imageId, uuid } = service;
+		let strAppId: string | undefined | null = uuid;
+		if (!strAppId) {
+			strAppId = appId?.toString();
+		}
+
+		if (!strAppId) {
 			continue;
 		}
-		if (apps[appId] == null) {
-			apps[appId] = {};
+
+		if (apps[strAppId] == null) {
+			apps[strAppId] = {};
 		}
-		creationTimesAndReleases[appId] = {};
-		if (apps[appId].services == null) {
-			apps[appId].services = {};
+		creationTimesAndReleases[strAppId] = {};
+		if (apps[strAppId].services == null) {
+			apps[strAppId].services = {};
 		}
 		// We only send commit if all services have the same release, and it matches the target release
 		if (releaseId == null) {
@@ -806,25 +954,29 @@ export async function getStatus() {
 				`imageId not defined in ApplicationManager.getStatus: ${service}`,
 			);
 		}
-		if (apps[appId].services[imageId] == null) {
-			apps[appId].services[imageId] = _.pick(service, ['status', 'releaseId']);
-			creationTimesAndReleases[appId][imageId] = _.pick(service, [
+		if (apps[strAppId].services[imageId] == null) {
+			apps[strAppId].services[imageId] = _.pick(service, [
+				'status',
+				'releaseId',
+			]);
+			creationTimesAndReleases[strAppId][imageId] = _.pick(service, [
 				'createdAt',
 				'releaseId',
 			]);
-			apps[appId].services[imageId].download_progress = null;
+			apps[strAppId].services[imageId].download_progress = null;
 		} else {
 			// There's two containers with the same imageId, so this has to be a handover
-			apps[appId].services[imageId].releaseId = _.minBy(
-				[creationTimesAndReleases[appId][imageId], service],
+			apps[strAppId].services[imageId].releaseId = _.minBy(
+				[creationTimesAndReleases[strAppId][imageId], service],
 				'createdAt',
 			).releaseId;
-			apps[appId].services[imageId].status = 'Handing over';
+			apps[strAppId].services[imageId].status = 'Handing over';
 		}
 	}
 
 	for (const image of images) {
 		const { appId } = image;
+
 		if (!image.dependent) {
 			if (apps[appId] == null) {
 				apps[appId] = {};
