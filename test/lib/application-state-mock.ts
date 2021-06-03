@@ -42,7 +42,7 @@ function unmockManagers() {
 	// @ts-expect-error Assigning to a RO property
 	networkManager.getAll = originalNetGetAll;
 	// @ts-expect-error Assigning to a RO property
-	serviceManager.getall = originalSvcGetAll;
+	serviceManager.getAll = originalSvcGetAll;
 }
 
 export function mockImages(

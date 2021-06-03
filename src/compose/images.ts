@@ -90,7 +90,13 @@ export const initialized = (async () => {
 
 type ServiceInfo = Pick<
 	Service,
-	'imageName' | 'appId' | 'serviceId' | 'serviceName' | 'imageId' | 'releaseId'
+	| 'imageName'
+	| 'appId'
+	| 'uuid'
+	| 'serviceId'
+	| 'serviceName'
+	| 'imageId'
+	| 'releaseId'
 >;
 export function imageFromService(service: ServiceInfo): Image {
 	// We know these fields are defined because we create these images from target state
@@ -367,6 +373,7 @@ async function getImagesForCleanup(): Promise<string[]> {
 			.then((vals) => vals.map((img: Image) => img.dockerImageId)),
 	]);
 
+	// TODO: this doesn't work anymore with registry managed supervisor
 	const supervisorRepos = [supervisorImageInfo.imageName];
 	// If we're on the new balena/ARCH-supervisor image
 	if (_.startsWith(supervisorImageInfo.imageName, 'balena/')) {

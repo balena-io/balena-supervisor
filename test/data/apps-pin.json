@@ -5,7 +5,9 @@
 		"RESIN_HOST_LOG_TO_DISPLAY": "0"
 	},
 	"apps": {
-		"1234": {
+		"uuid": {
+			"appId": 1234,
+			"type": "supervised",
 			"name": "superapp",
 			"commit": "abcdef",
 			"releaseId": 1,

@@ -2,10 +2,10 @@ import * as _ from 'lodash';
 import { expect } from 'chai';
 
 import * as appMock from './lib/application-state-mock';
+import { createApp, createService } from './lib/compose-helpers';
 
 import * as applicationManager from '../src/compose/application-manager';
 import * as deviceState from '../src/device-state';
-import App from '../src/compose/app';
 import * as config from '../src/config';
 import * as dbFormat from '../src/device-state/db-format';
 
@@ -16,7 +16,6 @@ import {
 	CompositionStep,
 	CompositionStepAction,
 } from '../src/compose/composition-steps';
-import { ServiceComposeConfig } from '../src/compose/types/service';
 import { Image } from '../src/compose/images';
 import { inspect } from 'util';
 
@@ -26,52 +25,6 @@ const defaultContext = {
 	containerIds: {},
 	downloading: [],
 };
-
-function createApp(
-	services: Service[],
-	networks: Network[],
-	volumes: Volume[],
-	target: boolean,
-	appId = 1,
-) {
-	return new App(
-		{
-			appId,
-			services,
-			networks: _.keyBy(networks, 'name'),
-			volumes: _.keyBy(volumes, 'name'),
-		},
-		target,
-	);
-}
-
-async function createService(
-	conf: Partial<ServiceComposeConfig>,
-	appId = 1,
-	serviceName = 'test',
-	releaseId = 2,
-	serviceId = 3,
-	imageId = 4,
-	extraState?: Partial<Service>,
-) {
-	const svc = await Service.fromComposeObject(
-		{
-			appId,
-			serviceName,
-			releaseId,
-			serviceId,
-			imageId,
-			...conf,
-		},
-		{} as any,
-	);
-	if (extraState != null) {
-		for (const k of Object.keys(extraState)) {
-			(svc as any)[k] = (extraState as any)[k];
-		}
-	}
-	return svc;
-}
 
 type ServicePredicate = string | ((service: Partial<Service>) => boolean);
 type StepTest = Chai.Assertion & {
@@ -142,7 +95,7 @@ function expectNoStep(action: CompositionStepAction, steps: CompositionStep[]) {
 	}
 }
 
-const defaultNetwork = Network.fromComposeObject('default', 1, {});
+const defaultNetwork = Network.fromComposeObject('default', 1, 'test-uuid', {});
 
 describe('compose/app', () => {
 	before(async () => {
@@ -164,7 +117,7 @@ describe('compose/app', () => {
 		const target = createApp(
 			[],
 			[],
-			[Volume.fromComposeObject('test-volume', 1, {})],
+			[Volume.fromComposeObject('test-volume', 1, 'test-uuid', {})],
 			true,
 		);
 
@@ -183,8 +136,8 @@ describe('compose/app', () => {
 			[],
 			[],
 			[
-				Volume.fromComposeObject('test-volume', 1, {}),
-				Volume.fromComposeObject('test-volume-2', 1, {}),
+				Volume.fromComposeObject('test-volume', 1, 'test-uuid', {}),
+				Volume.fromComposeObject('test-volume-2', 1, 'test-uuid', {}),
 			],
 			true,
 		);
@@ -209,15 +162,15 @@ describe('compose/app', () => {
 			[],
 			[],
 			[
-				Volume.fromComposeObject('test-volume', 1, {}),
-				Volume.fromComposeObject('test-volume-2', 1, {}),
+				Volume.fromComposeObject('test-volume', 1, 'test-uuid', {}),
+				Volume.fromComposeObject('test-volume-2', 1, 'test-uuid', {}),
 			],
 			false,
 		);
 		const target = createApp(
 			[],
 			[],
-			[Volume.fromComposeObject('test-volume-2', 1, {})],
+			[Volume.fromComposeObject('test-volume-2', 1, 'test-uuid', {})],
 			true,
 		);
 
@@ -232,14 +185,14 @@ describe('compose/app', () => {
 		const current = createApp(
 			[],
 			[],
-			[Volume.fromComposeObject('test-volume', 1, {})],
+			[Volume.fromComposeObject('test-volume', 1, 'test-uuid', {})],
 			false,
 		);
 		const target = createApp(
 			[],
 			[],
 			[
-				Volume.fromComposeObject('test-volume', 1, {
+				Volume.fromComposeObject('test-volume', 1, 'test-uuid', {
 					labels: { test: 'test' },
 				}),
 			],
@@ -253,7 +206,10 @@ describe('compose/app', () => {
 			.to.have.property('current')
 			.that.has.property('config')
 			.that.has.property('labels')
-			.that.deep.equals({ 'io.balena.supervised': 'true' });
+			.that.deep.equals({
+				'io.balena.supervised': 'true',
+				'io.balena.app-uuid': 'test-uuid',
+			});
 
 		current.volumes = {};
 		steps = current.nextStepsForAppUpdate(defaultContext, target);
@@ -262,21 +218,25 @@ describe('compose/app', () => {
 			.to.have.property('target')
 			.that.has.property('config')
 			.that.has.property('labels')
-			.that.deep.equals({ 'io.balena.supervised': 'true', test: 'test' });
+			.that.deep.equals({
+				'io.balena.supervised': 'true',
+				'io.balena.app-uuid': 'test-uuid',
+				test: 'test',
+			});
 	});
 
 	it('should kill dependencies of a volume before changing config', async () => {
 		const current = createApp(
 			[await createService({ volumes: ['test-volume'] })],
 			[],
-			[Volume.fromComposeObject('test-volume', 1, {})],
+			[Volume.fromComposeObject('test-volume', 1, 'test-uuid', {})],
 			false,
 		);
 		const target = createApp(
 			[await createService({ volumes: ['test-volume'] })],
 			[],
 			[
-				Volume.fromComposeObject('test-volume', 1, {
+				Volume.fromComposeObject('test-volume', 1, 'test-uuid', {
 					labels: { test: 'test' },
 				}),
 			],
@@ -295,7 +255,7 @@ describe('compose/app', () => {
 	it('should correctly infer to remove an apps volumes when it is no longer referenced', async () => {
 		appMock.mockManagers(
 			[],
-			[Volume.fromComposeObject('test-volume', 1, {})],
+			[Volume.fromComposeObject('test-volume', 1, 'test-uuid', {})],
 			[],
 		);
 		appMock.mockImages([], false, []);
@@ -321,7 +281,7 @@ describe('compose/app', () => {
 		const current = createApp([], [], [], false);
 		const target = createApp(
 			[],
-			[Network.fromComposeObject('default', 1, {})],
+			[Network.fromComposeObject('default', 1, 'test-uuid', {})],
 			[],
 			true,
 		);
@@ -333,7 +293,7 @@ describe('compose/app', () => {
 	it('should correctly infer a network remove step', () => {
 		const current = createApp(
 			[],
-			[Network.fromComposeObject('test-network', 1, {})],
+			[Network.fromComposeObject('test-network', 1, 'test-uuid', {})],
 			[],
 			false,
 		);
@@ -350,14 +310,14 @@ describe('compose/app', () => {
 	it('should correctly infer a network recreation step', () => {
 		const current = createApp(
 			[],
-			[Network.fromComposeObject('test-network', 1, {})],
+			[Network.fromComposeObject('test-network', 1, 'test-uuid', {})],
 			[],
 			false,
 		);
 		const target = createApp(
 			[],
 			[
-				Network.fromComposeObject('test-network', 1, {
+				Network.fromComposeObject('test-network', 1, 'test-uuid', {
 					labels: { TEST: 'TEST' },
 				}),
 			],
@@ -384,7 +344,7 @@ describe('compose/app', () => {
 	it('should kill dependencies of networks before removing', async () => {
 		const current = createApp(
 			[await createService({ networks: { 'test-network': {} } })],
-			[Network.fromComposeObject('test-network', 1, {})],
+			[Network.fromComposeObject('test-network', 1, 'test-uuid', {})],
 			[],
 			false,
 		);
@@ -401,14 +361,14 @@ describe('compose/app', () => {
 	it('should kill dependencies of networks before changing config', async () => {
 		const current = createApp(
 			[await createService({ networks: { 'test-network': {} } })],
-			[Network.fromComposeObject('test-network', 1, {})],
+			[Network.fromComposeObject('test-network', 1, 'test-uuid', {})],
 			[],
 			false,
 		);
 		const target = createApp(
 			[await createService({ networks: { 'test-network': {} } })],
 			[
-				Network.fromComposeObject('test-network', 1, {
+				Network.fromComposeObject('test-network', 1, 'test-uuid', {
 					labels: { test: 'test' },
 				}),
 			],
@@ -432,14 +392,14 @@ describe('compose/app', () => {
 		const current = createApp(
 			[service],
 			[],
-			[Volume.fromComposeObject('test-volume', 1, {})],
+			[Volume.fromComposeObject('test-volume', 1, 'test-uuid', {})],
 			false,
 		);
 		const target = createApp(
 			[service],
 			[],
 			[
-				Volume.fromComposeObject('test-volume', 1, {
+				Volume.fromComposeObject('test-volume', 1, 'test-uuid', {
 					labels: { test: 'test' },
 				}),
 			],
@@ -468,13 +428,13 @@ describe('compose/app', () => {
 				await createService({}, 1, 'main', 1, 1),
 				await createService({}, 1, 'aux', 1, 2),
 			],
-			[Network.fromComposeObject('test-network', 1, {})],
+			[Network.fromComposeObject('test-network', 1, 'test-uuid', {})],
 			[],
 			false,
 		);
 		const target = createApp(
 			[await createService({}, 1, 'main', 2, 1)],
-			[Network.fromComposeObject('test-network', 1, {})],
+			[Network.fromComposeObject('test-network', 1, 'test-uuid', {})],
 			[],
 			true,
 		);
@@ -489,7 +449,11 @@ describe('compose/app', () => {
 
 	it('should emit a noop when a service which is no longer referenced is already stopping', async () => {
 		const current = createApp(
-			[await createService({}, 1, 'main', 1, 1, 1, { status: 'Stopping' })],
+			[
+				await createService({}, 1, 'main', 1, 1, 1, 'test-uuid', {
+					status: 'Stopping',
+				}),
+			],
 			[],
 			[],
 			false,
@@ -502,7 +466,11 @@ describe('compose/app', () => {
 
 	it('should remove a dead container that is still referenced in the target state', async () => {
 		const current = createApp(
-			[await createService({}, 1, 'main', 1, 1, 1, { status: 'Dead' })],
+			[
+				await createService({}, 1, 'main', 1, 1, 1, 'test-uuid', {
+					status: 'Dead',
+				}),
+			],
 			[],
 			[],
 			false,
@@ -520,7 +488,11 @@ describe('compose/app', () => {
 
 	it('should remove a dead container that is not referenced in the target state', async () => {
 		const current = createApp(
-			[await createService({}, 1, 'main', 1, 1, 1, { status: 'Dead' })],
+			[
+				await createService({}, 1, 'main', 1, 1, 1, 'test-uuid', {
+					status: 'Dead',
+				}),
+			],
 			[],
 			[],
 			false,
@@ -594,6 +566,7 @@ describe('compose/app', () => {
 					1,
 					1,
 					1,
+					'test-uuid',
 					{ containerId: 'run_once' },
 				),
 			],
@@ -615,6 +588,7 @@ describe('compose/app', () => {
 					1,
 					1,
 					1,
+					'test-uuid',
 					{ containerId: 'run_once' },
 				),
 			],
@@ -644,13 +618,24 @@ describe('compose/app', () => {
 			},
 		};
 		let current = createApp(
-			[await createService({}, 1, 'main', 1, 1, 1, {})],
+			[await createService({}, 1, 'main', 1, 1, 1, 'test-uuid', {})],
 			[defaultNetwork],
 			[],
 			false,
 		);
 		const target = createApp(
-			[await createService({ privileged: true }, 1, 'main', 1, 1, 1, {})],
+			[
+				await createService(
+					{ privileged: true },
+					1,
+					'main',
+					1,
+					1,
+					1,
+					'test-uuid',
+					{},
+				),
+			],
 			[defaultNetwork],
 			[],
 			true,
@@ -697,10 +682,19 @@ describe('compose/app', () => {
 		try {
 			let current = createApp(
 				[
-					await createService({ running: false }, 1, 'dep', 1, 2, 2, {
-						status: 'Installing',
-						containerId: 'id',
-					}),
+					await createService(
+						{ running: false },
+						1,
+						'dep',
+						1,
+						2,
+						2,
+						'test-uuid',
+						{
+							status: 'Installing',
+							containerId: 'id',
+						},
+					),
 				],
 				[defaultNetwork],
 				[],
@@ -708,8 +702,10 @@ describe('compose/app', () => {
 			);
 			const target = createApp(
 				[
-					await createService({}, 1, 'main', 1, 1, 1, { dependsOn: ['dep'] }),
-					await createService({}, 1, 'dep', 1, 2, 2),
+					await createService({}, 1, 'main', 1, 1, 1, 'test-uuid', {
+						dependsOn: ['dep'],
+					}),
+					await createService({}, 1, 'dep', 1, 2, 2, 'test-uuid'),
 				],
 				[defaultNetwork],
 				[],
@@ -727,7 +723,11 @@ describe('compose/app', () => {
 
 			// we now make our current state have the 'dep' service as started...
 			current = createApp(
-				[await createService({}, 1, 'dep', 1, 2, 2, { containerId: 'id' })],
+				[
+					await createService({}, 1, 'dep', 1, 2, 2, 'test-uuid', {
+						containerId: 'id',
+					}),
+				],
 				[defaultNetwork],
 				[],
 				false,
@@ -799,13 +799,24 @@ describe('compose/app', () => {
 			},
 		};
 		const current = createApp(
-			[await createService({ running: false }, 1, 'main', 1, 1, 1, {})],
+			[
+				await createService(
+					{ running: false },
+					1,
+					'main',
+					1,
+					1,
+					1,
+					'test-uuid',
+					{},
+				),
+			],
 			[defaultNetwork],
 			[],
 			false,
 		);
 		const target = createApp(
-			[await createService({}, 1, 'main', 1, 1, 1, {})],
+			[await createService({}, 1, 'main', 1, 1, 1, 'test-uuid', {})],
 			[defaultNetwork],
 			[],
 			true,
@@ -868,6 +879,7 @@ describe('compose/app', () => {
 					1,
 					1,
 					1,
+					'test-uuid',
 					{},
 				),
 			],
@@ -884,6 +896,7 @@ describe('compose/app', () => {
 					2,
 					1,
 					2,
+					'test-uuid',
 					{},
 				),
 			],
@@ -949,10 +962,28 @@ describe('compose/app', () => {
 
 		const current = createApp(
 			[
-				await createService({ image: 'main-image' }, 1, 'main', 1, 1, 1, {
-					dependsOn: ['dep'],
-				}),
-				await createService({ image: 'dep-image' }, 1, 'dep', 1, 2, 2, {}),
+				await createService(
+					{ image: 'main-image' },
+					1,
+					'main',
+					1,
+					1,
+					1,
+					'test-uuid',
+					{
+						dependsOn: ['dep'],
+					},
+				),
+				await createService(
+					{ image: 'dep-image' },
+					1,
+					'dep',
+					1,
+					2,
+					2,
+					'test-uuid',
+					{},
+				),
 			],
 			[defaultNetwork],
 			[],
@@ -960,10 +991,28 @@ describe('compose/app', () => {
 		);
 		const target = createApp(
 			[
-				await createService({ image: 'main-image-2' }, 1, 'main', 2, 1, 3, {
-					dependsOn: ['dep'],
-				}),
-				await createService({ image: 'dep-image-2' }, 1, 'dep', 2, 2, 4, {}),
+				await createService(
+					{ image: 'main-image-2' },
+					1,
+					'main',
+					2,
+					1,
+					3,
+					'test-uuid',
+					{
+						dependsOn: ['dep'],
+					},
+				),
+				await createService(
+					{ image: 'dep-image-2' },
+					1,
+					'dep',
+					2,
+					2,
+					4,
+					'test-uuid',
+					{},
+				),
 			],
 			[defaultNetwork],
 			[],
@@ -1002,7 +1051,18 @@ describe('compose/app', () => {
 		};
 
 		const current = createApp(
-			[await createService({ image: 'main-image' }, 1, 'main', 1, 1, 1, {})],
+			[
+				await createService(
+					{ image: 'main-image' },
+					1,
+					'main',
+					1,
+					1,
+					1,
+					'test-uuid',
+					{},
+				),
+			],
 			[defaultNetwork],
 			[],
 			false,
@@ -1084,7 +1144,7 @@ describe('compose/app', () => {
 		const current = createApp([], [defaultNetwork], [], false);
 		const target = createApp(
 			[await createService({ networks: ['test'] }, 1)],
-			[defaultNetwork, Network.fromComposeObject('test', 1, {})],
+			[defaultNetwork, Network.fromComposeObject('test', 1, 'test-uuid', {})],
 			[],
 			true,
 		);
@@ -1112,7 +1172,12 @@ describe('compose/app', () => {
 				volumes: ['db-volume'],
 				image: 'test-image',
 			});
-			const volume = Volume.fromComposeObject('db-volume', service.appId, {});
+			const volume = Volume.fromComposeObject(
+				'db-volume',
+				service.appId,
+				'deadc0de',
+				{},
+			);
 			const contextWithImages = {
 				...defaultContext,
 				...{

@@ -102,7 +102,15 @@ export async function createFromPath(
 	config: Partial<VolumeConfig>,
 	oldPath: string,
 ): Promise<Volume> {
-	const volume = Volume.fromComposeObject(name, appId, config);
+	const volume = Volume.fromComposeObject(
+		name,
+		appId,
+		// We don't have a uuid available here, but we need one to create a volume
+		// from a compose object. We pass uuid as undefined here so that we will
+		// fallback to id comparison for apps
+		undefined as any,
+		config,
+	);
 
 	await create(volume);
 	const inspect = await docker

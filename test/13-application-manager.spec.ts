@@ -109,10 +109,20 @@ describe.skip('ApplicationManager', function () {
 						Service.fromComposeObject(svc, { appName: 'test' }),
 					),
 					networks: _.mapValues(app.networks, (conf, name) =>
-						Network.fromComposeObject(name, parseInt(appId, 10), conf),
+						Network.fromComposeObject(
+							name,
+							parseInt(appId, 10),
+							'test-uuid',
+							conf,
+						),
 					),
 					volumes: _.mapValues(app.volumes, (conf, name) =>
-						Volume.fromComposeObject(name, parseInt(appId, 10), conf),
+						Volume.fromComposeObject(
+							name,
+							parseInt(appId, 10),
+							'test-uuid',
+							conf,
+						),
 					),
 				};
 				currentCloned.local.apps[parseInt(appId, 10)] = appCloned;
@@ -542,7 +552,7 @@ describe.skip('ApplicationManager', function () {
 				Bluebird.Promise.resolve([
 					{
 						action: 'removeVolume',
-						current: Volume.fromComposeObject('my_volume', 12, {}),
+						current: Volume.fromComposeObject('my_volume', 12, 'test-uuid', {}),
 					},
 				]),
 			);

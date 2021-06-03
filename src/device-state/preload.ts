@@ -42,31 +42,36 @@ export async function loadTargetFromFile(
 		const preloadState = stateFromFile as AppsJsonFormat;
 
 		let commitToPin: string | undefined;
-		let appToPin: string | undefined;
+		let appToPin: number | undefined;
 
 		if (_.isEmpty(preloadState)) {
 			return;
 		}
 
 		const imgs: Image[] = [];
-		const appIds = _.keys(preloadState.apps);
-		for (const appId of appIds) {
-			const app = preloadState.apps[appId];
+		const uuids = _.keys(preloadState.apps);
+
+		for (const uuid of uuids) {
+			const app = preloadState.apps[uuid];
+
 			// Multi-app warning!
 			// The following will need to be changed once running
 			// multiple applications is possible
 			commitToPin = app.commit;
-			appToPin = appId;
+			appToPin = app.appId;
 			const serviceIds = _.keys(app.services);
+
 			for (const serviceId of serviceIds) {
 				const service = app.services[serviceId];
+
 				const svc = {
 					imageName: service.image,
 					serviceName: service.serviceName,
 					imageId: service.imageId,
 					serviceId: parseInt(serviceId, 10),
 					releaseId: app.releaseId,
-					appId: parseInt(appId, 10),
+					appId: app.appId,
+					uuid,
 				};
 				imgs.push(imageFromService(svc));
 			}
@@ -75,7 +80,11 @@ export async function loadTargetFromFile(
 		for (const image of imgs) {
 			const name = await images.normalise(image.name);
 			image.name = name;
-			await images.save(image);
+			// TODO: the only reason for adding the images to the database here
+			// is to prevent downloading images if for any reason they are not there
+			// when starting from a preloading state. But if they are not there, isn't
+			// that really a preload issue?
+			// await images.save(image);
 		}
 
 		const deviceConf = await deviceConfig.getCurrent();
@@ -97,7 +106,7 @@ export async function loadTargetFromFile(
 				await config.set({
 					pinDevice: {
 						commit: commitToPin,
-						app: parseInt(appToPin, 10),
+						app: appToPin,
 					},
 				});
 			}

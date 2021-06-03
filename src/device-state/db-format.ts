@@ -11,6 +11,7 @@ import {
 	TargetApplication,
 	TargetApplications,
 	TargetApplicationService,
+	TargetState,
 } from '../types/state';
 import { checkInt } from '../lib/validation';
 
@@ -37,20 +38,20 @@ export async function getApps(): Promise<InstancedAppState> {
 }
 
 export async function setApps(
-	apps: { [appId: number]: TargetApplication },
+	apps: TargetState['local']['apps'],
 	source: string,
 	trx?: db.Transaction,
 ) {
 	const dbApps = await Promise.all(
-		Object.keys(apps).map(async (appIdStr) => {
-			const appId = checkInt(appIdStr)!;
-
-			const app = apps[appId];
+		Object.keys(apps).map(async (uuid) => {
+			const app = apps[uuid];
 			const services = await Promise.all(
 				_.map(app.services, async (s, sId) => ({
 					...s,
-					appId,
+					appId: app.appId,
+					uuid,
 					releaseId: app.releaseId,
+					releaseVersion: app.releaseVersion,
 					serviceId: checkInt(sId),
 					commit: app.commit,
 					image: await images.normalise(s.image),
@@ -58,11 +59,14 @@ export async function setApps(
 			);
 
 			return {
-				appId,
+				uuid,
+				appId: app.appId,
 				source,
 				commit: app.commit,
 				name: app.name,
 				releaseId: app.releaseId,
+				releaseVersion: app.releaseVersion,
+				isHost: app.isHost ?? false,
 				services: JSON.stringify(services),
 				networks: JSON.stringify(app.networks ?? {}),
 				volumes: JSON.stringify(app.volumes ?? {}),

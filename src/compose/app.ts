@@ -26,14 +26,18 @@ import { checkTruthy, checkString } from '../lib/validation';
 import { ServiceComposeConfig, DeviceMetadata } from './types/service';
 import { ImageInspectInfo } from 'dockerode';
 import { pathExistsOnHost } from '../lib/fs-utils';
+import { getSupervisorMetadata } from '../lib/supervisor-metadata';
 
 export interface AppConstructOpts {
 	appId: number;
 	appName?: string;
 	commit?: string;
+	isHost?: boolean;
+	isSupervisor?: boolean;
 	releaseId?: number;
+	releaseVersion?: string;
 	source?: string;
-
+	uuid?: string;
 	services: Service[];
 	volumes: Dictionary<Volume>;
 	networks: Dictionary<Network>;
@@ -56,8 +60,15 @@ export class App {
 	// When setting up an application from current state, these values are not available
 	public appName?: string;
 	public commit?: string;
+	public isHost?: boolean;
+
+	// This is necessary for tri-app. Once true multi-app is there this won't be
+	// necessary
+	public isSupervisor?: boolean;
 	public releaseId?: number;
+	public releaseVersion?: string;
 	public source?: string;
+	public uuid?: string;
 
 	// Services are stored as an array, as at any one time we could have more than one
 	// service for a single service ID running (for example handover)
@@ -69,17 +80,23 @@ export class App {
 		this.appId = opts.appId;
 		this.appName = opts.appName;
 		this.commit = opts.commit;
+		this.isHost = opts.isHost;
 		this.releaseId = opts.releaseId;
+		this.releaseVersion = opts.releaseVersion;
 		this.source = opts.source;
 		this.services = opts.services;
 		this.volumes = opts.volumes;
 		this.networks = opts.networks;
+		this.uuid = opts.uuid;
+		this.isSupervisor = opts.isSupervisor;
 
 		if (this.networks.default == null && isTargetState) {
 			// We always want a default network
 			this.networks.default = Network.fromComposeObject(
 				'default',
 				opts.appId,
+				// Target state always has a uuid set
+				opts.uuid!,
 				{},
 			);
 		}
@@ -162,12 +179,19 @@ export class App {
 			),
 		);
 
+		// Do this only for the user app as a way to identify it
+		// from other apps. For now the state endpoint is still
+		// expecting a single commit for the device. Once we move to full multi-app
+		// we can remove the commitStore table altogether as information about
+		// the release is already on the container
 		if (
 			steps.length === 0 &&
 			target.commit != null &&
-			this.commit !== target.commit
+			this.commit !== target.commit &&
+			// Only do this for user apps
+			!target.isHost &&
+			!target.isSupervisor
 		) {
-			// TODO: The next PR should change this to support multiapp commit values
 			steps.push(
 				generateStep('updateCommit', {
 					target: target.commit,
@@ -266,6 +290,10 @@ export class App {
 		removePairs: Array<ChangingPair<Service>>;
 		updatePairs: Array<ChangingPair<Service>>;
 	} {
+		// TODO: This is comparing by service id, so changing environment will forcibly
+		// trigger a reinstall of the services, an since image names are also
+		// different it will also trigger a fetch
+		// comparison should probably be done using serviceName as with docker compose
 		const currentByServiceId = _.keyBy(current, 'serviceId');
 		const targetByServiceId = _.keyBy(target, 'serviceId');
 
@@ -751,13 +779,13 @@ export class App {
 			if (conf.labels == null) {
 				conf.labels = {};
 			}
-			return Volume.fromComposeObject(name, app.appId, conf);
+			return Volume.fromComposeObject(name, app.appId, app.uuid, conf);
 		});
 
 		const networks = _.mapValues(
 			JSON.parse(app.networks) ?? {},
 			(conf, name) => {
-				return Network.fromComposeObject(name, app.appId, conf ?? {});
+				return Network.fromComposeObject(name, app.appId, app.uuid, conf ?? {});
 			},
 		);
 
@@ -792,11 +820,38 @@ export class App {
 			...opts,
 		};
 
+		const isService = (svc: ServiceComposeConfig) =>
+			!svc.labels ||
+			!svc.labels['io.balena.image.class'] ||
+			svc.labels['io.balena.image.class'] === 'service';
+
+		const isDataStore = (svc: ServiceComposeConfig) =>
+			!svc.labels ||
+			!svc.labels['io.balena.image.store'] ||
+			svc.labels['io.balena.image.store'] === 'data';
+
+		const supervisorMeta = await getSupervisorMetadata();
+
 		// In the db, the services are an array, but here we switch them to an
 		// object so that they are consistent
 		const services: Service[] = await Promise.all(
-			(JSON.parse(app.services) ?? []).map(
-				async (svc: ServiceComposeConfig) => {
+			(JSON.parse(app.services) ?? [])
+				.filter(
+					// For the host app, `io.balena.image.*` labels indicate special way
+					// to install the service image, so we ignore those we don't know how to
+					// handle yet. If a user app adds the labels, we treat those services
+					// just as any other
+					(svc: ServiceComposeConfig) =>
+						!app.isHost || (isService(svc) && isDataStore(svc)),
+				)
+				.filter(
+					// Ignore the supervisor service itself from the target state for now
+					// until the supervisor can update itself
+					(svc: ServiceComposeConfig) =>
+						app.uuid !== supervisorMeta.uuid ||
+						svc.serviceName !== supervisorMeta.serviceName,
+				)
+				.map(async (svc: ServiceComposeConfig) => {
 					// Try to fill the image id if the image is downloaded
 					let imageInfo: ImageInspectInfo | undefined;
 					try {
@@ -818,16 +873,20 @@ export class App {
 						svc,
 						(thisSvcOpts as unknown) as DeviceMetadata,
 					);
-				},
-			),
+				}),
 		);
+
 		return new App(
 			{
 				appId: app.appId,
 				commit: app.commit,
 				releaseId: app.releaseId,
+				releaseVersion: app.releaseVersion,
+				isHost: app.isHost ?? false,
+				isSupervisor: app.uuid === supervisorMeta.uuid,
 				appName: app.name,
 				source: app.source,
+				uuid: app.uuid,
 				services,
 				volumes,
 				networks,

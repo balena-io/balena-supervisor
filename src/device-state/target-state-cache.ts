@@ -8,12 +8,15 @@ import * as db from '../db';
 export interface DatabaseApp {
 	name: string;
 	releaseId: number;
+	releaseVersion: string;
 	commit: string;
 	appId: number;
+	isHost?: boolean;
 	services: string;
 	networks: string;
 	volumes: string;
 	source: string;
+	uuid: string;
 }
 export type DatabaseApps = DatabaseApp[];
 
@@ -75,6 +78,12 @@ export async function setTargetApps(
 	targetState = undefined;
 
 	await Promise.all(
-		apps.map((app) => db.upsertModel('app', app, { appId: app.appId }, trx)),
+		apps.map((app) => {
+			if (app.uuid) {
+				db.upsertModel('app', app, { uuid: app.uuid }, trx);
+			} else {
+				db.upsertModel('app', app, { appId: app.appId }, trx);
+			}
+		}),
 	);
 }

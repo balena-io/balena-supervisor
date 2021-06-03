@@ -186,7 +186,7 @@ export interface DeviceMetadata {
 	imageInfo?: Dockerode.ImageInspectInfo;
 	uuid: string | null;
 	appName: string;
-	version: string;
+	version: string; // TODO: this is not used anywhere
 	deviceType: string;
 	deviceArch: string;
 	deviceApiKey: string;

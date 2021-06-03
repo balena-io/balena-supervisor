@@ -567,22 +567,23 @@ export async function getStatus(): Promise<DeviceStatus> {
 	theState.local!.apps = appsStatus.local;
 	theState.dependent!.apps = appsStatus.dependent;
 
-	// Multi-app warning!
-	// If we have more than one app, simply return the first commit.
-	// Fortunately this won't become a problem until we have system apps, and then
-	// at that point we can filter non-system apps leaving a single user app.
-	// After this, for true multi-app, we will need to report our status back in a
-	// different way, meaning this function will no longer be needed
 	const appIds = Object.keys(theState.local!.apps).map((strId) =>
 		parseInt(strId, 10),
 	);
 
-	const appId: number | undefined = appIds[0];
-	if (appId != null) {
+	// Multi-app warning!
+	// For v3 target state endpoint we are moving away from is_on__commit (device level) to
+	// a is_running__release app level field.
+	// Only the commit for the user app will be stored for now but that will go away once
+	// we move to full multi-app. At that point we'll have to decide what to do with
+	// the `/v1/device` endpoint, since that is the only place that actually reports the commit
+	// When we deprecate v1 endpoints we will no longer have that problem.
+	for (const appId of appIds) {
 		const commit = await commitStore.getCommitForApp(appId);
 
 		if (commit != null && !applyInProgress) {
 			theState.local!.is_on__commit = commit;
+			break;
 		}
 	}
 

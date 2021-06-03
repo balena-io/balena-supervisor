@@ -44,7 +44,7 @@ for (const fn of Object.getOwnPropertyNames(dockerode.prototype)) {
 		fn !== 'constructor' &&
 		typeof (dockerode.prototype as any)[fn] === 'function'
 	) {
-		(dockerode.prototype as any)[fn] = async function (...args: any[]) {
+		(dockerode.prototype as any)[fn] = function (...args: any[]) {
 			console.log(`🐳  Calling ${fn}...`);
 			if (overrides[fn] != null) {
 				return overrides[fn](args);

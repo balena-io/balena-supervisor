@@ -377,11 +377,11 @@ export function isValidAppsObject(obj: any): boolean {
 		return false;
 	}
 
-	return _.every(obj, (v, appId) => {
-		if (!isValidShortText(appId) || !checkInt(appId)) {
+	return _.every(obj, (v, uuid) => {
+		if (!isValidShortText(uuid)) {
 			log.debug(
-				'Invalid appId passed to validation.isValidAppsObject\nApp ID:',
-				inspect(appId),
+				'Invalid UUID passed to validation.isValidAppsObject\nUUID:',
+				inspect(uuid),
 			);
 			return false;
 		}
@@ -398,6 +398,16 @@ export function isValidAppsObject(obj: any): boolean {
 					log.debug(
 						'Invalid service name passed to validation.isValidAppsObject\nName:',
 						inspect(n),
+					);
+					return false;
+				}
+				return true;
+			},
+			appId: (id: any) => {
+				if (id != null && checkInt(id) == null) {
+					log.debug(
+						'Invalid appId passed to validation.isValidAppsObject\nApp ID',
+						inspect(id),
 					);
 					return false;
 				}
@@ -454,7 +464,7 @@ export function isValidDependentDevicesObject(devices: any): boolean {
 	return _.every(devices, (val, uuid) => {
 		if (!isValidShortText(uuid)) {
 			log.debug(
-				'Invalid uuid passed to validation.isValidDependentDevicesObject\nuuid:',
+				'Invalid UUID passed to validation.isValidDependentDevicesObject\nUUID:',
 				inspect(uuid),
 			);
 			return false;

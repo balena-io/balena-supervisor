@@ -30,6 +30,7 @@ describe('Volume Manager', () => {
 			}),
 			createVolumeInspectInfo(Volume.generateDockerName(1, 'mysql'), {
 				'io.balena.supervised': '1', // Recently created volumes contain io.balena.supervised label
+				'io.balena.app-uuid': 'deadc0de', // More recently created volumes will have an app-uuid label
 			}),
 			createVolumeInspectInfo(Volume.generateDockerName(1, 'backend')), // Old Volumes will not have labels
 			createVolumeInspectInfo('user_created_volume'), // Volume not created by the Supervisor
@@ -40,6 +41,7 @@ describe('Volume Manager', () => {
 			await expect(volumeManager.getAll()).to.eventually.deep.equal([
 				{
 					appId: 1,
+					uuid: undefined,
 					config: {
 						driver: 'local',
 						driverOpts: {},
@@ -51,17 +53,20 @@ describe('Volume Manager', () => {
 				},
 				{
 					appId: 1,
+					uuid: 'deadc0de',
 					config: {
 						driver: 'local',
 						driverOpts: {},
 						labels: {
 							'io.balena.supervised': '1',
+							'io.balena.app-uuid': 'deadc0de',
 						},
 					},
 					name: 'mysql',
 				},
 				{
 					appId: 1,
+					uuid: undefined,
 					config: {
 						driver: 'local',
 						driverOpts: {},
@@ -92,9 +97,11 @@ describe('Volume Manager', () => {
 		const volumeData = [
 			createVolumeInspectInfo(Volume.generateDockerName(111, 'app'), {
 				'io.balena.supervised': '1',
+				'io.balena.app-uuid': 'deadc0de',
 			}),
 			createVolumeInspectInfo(Volume.generateDockerName(222, 'otherApp'), {
 				'io.balena.supervised': '1',
+				'io.balena.app-uuid': 'deadbeef',
 			}),
 		];
 		// Perform test
@@ -102,11 +109,13 @@ describe('Volume Manager', () => {
 			await expect(volumeManager.getAllByAppId(111)).to.eventually.deep.equal([
 				{
 					appId: 111,
+					uuid: 'deadc0de',
 					config: {
 						driver: 'local',
 						driverOpts: {},
 						labels: {
 							'io.balena.supervised': '1',
+							'io.balena.app-uuid': 'deadc0de',
 						},
 					},
 					name: 'app',
@@ -121,7 +130,7 @@ describe('Volume Manager', () => {
 		// Perform test
 		await mockedDockerode.testWithData({ volumes: volumeData }, async () => {
 			// Volume to create
-			const volume = Volume.fromComposeObject('main', 111, {});
+			const volume = Volume.fromComposeObject('main', 111, 'deadc0de', {});
 			stub(volume, 'create');
 			// Create volume
 			await volumeManager.create(volume);
@@ -140,10 +149,10 @@ describe('Volume Manager', () => {
 		// Perform test
 		await mockedDockerode.testWithData({ volumes: volumeData }, async () => {
 			// Volume to try again create
-			const volume = Volume.fromComposeObject('main', 111, {});
+			const volume = Volume.fromComposeObject('main', 111, 'deadc0de', {});
 			stub(volume, 'create');
 			// Create volume
-			await volumeManager.create(volume);
+			await expect(volumeManager.create(volume)).to.be.rejected;
 			// Check volume was not created
 			expect(volume.create as SinonStub).to.not.be.called;
 		});
@@ -159,7 +168,7 @@ describe('Volume Manager', () => {
 		// Perform test
 		await mockedDockerode.testWithData({ volumes: volumeData }, async () => {
 			// Volume to remove
-			const volume = Volume.fromComposeObject('main', 111, {});
+			const volume = Volume.fromComposeObject('main', 111, 'deadc0de', {});
 			stub(volume, 'remove');
 			// Remove volume
 			await volumeManager.remove(volume);

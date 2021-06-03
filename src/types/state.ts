@@ -53,10 +53,13 @@ export interface TargetState {
 		name: string;
 		config: EnvVarObject;
 		apps: {
-			[appId: string]: {
+			[uuid: string]: {
+				appId: number;
 				name: string;
 				commit: string;
 				releaseId: number;
+				releaseVersion: string;
+				isHost?: boolean;
 				services: {
 					[serviceId: string]: {
 						labels: LabelObject;

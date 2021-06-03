@@ -1,7 +1,6 @@
-
 {
   "local": {
-    "name": "lingering-frost",
+    "name": "white-tree",
     "config": {
       "RESIN_SUPERVISOR_DELTA_VERSION": "3",
       "RESIN_SUPERVISOR_NATIVE_LOGGER": "true",
@@ -11,17 +10,18 @@
       "RESIN_HOST_CONFIG_dtparam": "\"i2c_arm=on\",\"spi=on\",\"audio=on\"",
       "RESIN_HOST_CONFIG_enable_uart": "1",
       "RESIN_HOST_CONFIG_gpu_mem": "16",
+      "RESIN_HOST_FIREWALL_MODE": "",
       "RESIN_SUPERVISOR_DELTA": "1",
+      "RESIN_SUPERVISOR_LOCAL_MODE": "0",
       "RESIN_SUPERVISOR_POLL_INTERVAL": "900000"
     },
     "apps": {
-      "test-uuid": {
+      "mytestuuid": {
+        "appId": 1623449,
         "name": "pi4test",
-        "appId": 1234,
-        "type": "supervised",
-        "commit": "d0b7b1d5353c4a1d9d411614caf827f5",
-        "releaseId": 1405939,
-        "releaseVersion": "2.2.2",
+        "commit": "c23e5a0f49d31ea8ca2a4866e1ba8482",
+        "releaseId": 1551563,
+        "releaseVersion": "1.1.1",
         "services": {
           "482141": {
             "privileged": true,
@@ -38,9 +38,9 @@
               "io.resin.features.resin-api": "1",
               "io.resin.features.supervisor-api": "1"
             },
-            "imageId": 2339002,
+            "imageId": 2781425,
             "serviceName": "main",
-            "image": "registry2.balena-cloud.com/v2/f5aff5560e1fb6740a868bfe2e8a4684@sha256:9cd1d09aad181b98067dac95e08f121c3af16426f078c013a485c41a63dc035c",
+            "image": "registry2.balena-cloud.com/v2/eed0b001166e66b841336aba6ca7ea8f@sha256:5749b6b02f2bf475463cd63c5acf1aabb585313ff12769b5c2f7c3b23e73c6c7",
             "running": true,
             "environment": {}
           }

@@ -58,6 +58,10 @@ export = async function () {
 			'./test/data/config-apibinder-offline2.json',
 			fs.readFileSync('./test/data/testconfig-apibinder-offline2.json'),
 		);
+		fs.writeFileSync(
+			'./test/data/config-uuid.json',
+			fs.readFileSync('./test/data/testconfig-uuid.json'),
+		);
 	} catch (e) {
 		/* ignore /*/
 	}

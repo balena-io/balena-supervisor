@@ -169,11 +169,12 @@ describe('compose/application-manager', () => {
 					SUPERVISOR_PERSISTENT_LOGGING: 'false',
 				},
 				apps: {
-					'1': {
+					'test-uuid': {
 						appId: 1,
 						name: 'userapp',
 						commit: 'aaaaaaa',
 						releaseId: 1,
+						releaseVersion: '2.2.2',
 						services: {
 							'1': {
 								serviceName: 'mainy-1-servicey',
@@ -186,11 +187,12 @@ describe('compose/application-manager', () => {
 						volumes: {},
 						networks: {},
 					},
-					'100': {
+					'test-uuid2': {
 						appId: 100,
 						name: 'systemapp',
 						commit: 'bbbbbbb',
 						releaseId: 100,
+						releaseVersion: '0.2.2',
 						services: {
 							'100': {
 								serviceName: 'mainy-2-systemapp',

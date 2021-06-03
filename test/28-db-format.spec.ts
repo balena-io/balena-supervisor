@@ -12,9 +12,9 @@ import Service from '../src/compose/service';
 import Network from '../src/compose/network';
 import { TargetApplication } from '../src/types/state';
 
-function getDefaultNetworks(appId: number) {
+function getDefaultNetworks(appId: number, uuid: string) {
 	return {
-		default: Network.fromComposeObject('default', appId, {}),
+		default: Network.fromComposeObject('default', appId, uuid, {}),
 	};
 }
 
@@ -39,20 +39,24 @@ describe('DB Format', () => {
 		await targetStateCache.setTargetApps([
 			{
 				appId: 1,
+				uuid: 'test-uuid1',
 				commit: 'abcdef',
 				name: 'test-app',
 				source: apiEndpoint,
 				releaseId: 123,
+				releaseVersion: '1.5.1',
 				services: '[]',
 				networks: '[]',
 				volumes: '[]',
 			},
 			{
 				appId: 2,
+				uuid: 'test-uuid2',
 				commit: 'abcdef2',
 				name: 'test-app2',
 				source: apiEndpoint,
 				releaseId: 1232,
+				releaseVersion: '0.5.1',
 				services: JSON.stringify([
 					{
 						serviceName: 'test-service',
@@ -95,7 +99,7 @@ describe('DB Format', () => {
 		expect(app).to.have.property('volumes').that.deep.equals({});
 		expect(app)
 			.to.have.property('networks')
-			.that.deep.equals(getDefaultNetworks(1));
+			.that.deep.equals(getDefaultNetworks(1, 'test-uuid1'));
 	});
 
 	it('should correctly build services from the database', async () => {
@@ -126,7 +130,7 @@ describe('DB Format', () => {
 		const target = await import('./data/state-endpoints/simple.json');
 		const dbApps: { [appId: number]: TargetApplication } = {};
 		dbApps[1234] = {
-			...target.local.apps[1234],
+			...target.local.apps['test-uuid'],
 		};
 
 		await dbFormat.setApps(dbApps, apiEndpoint);

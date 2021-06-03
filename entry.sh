@@ -28,6 +28,14 @@ if [ -z "$DOCKER_SOCKET" ]; then
 	export DOCKER_SOCKET=/run/docker.sock
 fi
 
+# Use a trick to get the container id from inside the container itself in
+# in case the supervisor is started some other way than with the start-resin-supervisor
+# script. This will not work with cgrous v2
+# https://stackoverflow.com/a/25729598
+if [ -z "${SUPERVISOR_CONTAINER_ID}" ]; then
+	SUPERVISOR_CONTAINER_ID=$(cat /proc/self/cgroup | grep -o  -e "docker-.*.scope" | head -n 1 | sed "s/docker-\(.*\).scope/\\1/")
+fi
+
 export DBUS_SYSTEM_BUS_ADDRESS="unix:path=/mnt/root/run/dbus/system_bus_socket"
 
 # Include self-signed CAs, should they exist

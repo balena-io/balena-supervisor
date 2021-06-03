@@ -135,7 +135,7 @@ export const update = async (
 			);
 		}
 
-		const endpoint = url.resolve(apiEndpoint, `/device/v2/${uuid}/state`);
+		const endpoint = url.resolve(apiEndpoint, `/device/v3/${uuid}/state`);
 		const request = await getRequestInstance();
 
 		const params: CoreOptions = {

@@ -9,7 +9,8 @@ const constants = {
 	rootMountPoint,
 	databasePath:
 		checkString(process.env.DATABASE_PATH) || '/data/database.sqlite',
-	containerId: checkString(process.env.SUPERVISOR_CONTAINER_ID) || undefined,
+	containerId:
+		checkString(process.env.SUPERVISOR_CONTAINER_ID) || 'balena_supervisor',
 	dockerSocket: process.env.DOCKER_SOCKET || '/var/run/docker.sock',
 
 	// In-container location for docker socket

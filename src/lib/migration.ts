@@ -34,7 +34,7 @@ export const defaultLegacyVolume = () => 'resin-data';
 
 export function singleToMulticontainerApp(
 	app: Dictionary<any>,
-): TargetApplication & { appId: string } {
+): TargetApplication {
 	const environment: Dictionary<string> = {};
 	for (const key in app.env) {
 		if (!/^RESIN_/.test(key)) {
@@ -44,11 +44,12 @@ export function singleToMulticontainerApp(
 
 	const { appId } = app;
 	const conf = app.config != null ? app.config : {};
-	const newApp: TargetApplication & { appId: string } = {
-		appId: appId.toString(),
+	const newApp: TargetApplication = {
+		appId,
 		commit: app.commit,
 		name: app.name,
 		releaseId: 1,
+		releaseVersion: app.commit,
 		networks: {},
 		volumes: {},
 		services: {},
