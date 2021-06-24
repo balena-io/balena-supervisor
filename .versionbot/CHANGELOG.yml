@@ -1,4 +1,19 @@
 - commits:
+    - subject: Add download progress LED blink
+      hash: aa2370689491abcffa25a1e1c7a2c9f0cbd91241
+      body: |
+        On devices that have ACT LED, blink it while a new release
+        is being downloaded.
+      footer:
+        Change-type: minor
+        change-type: minor
+        Signed-off-by: Tomás Migone <tomas@balena.io>
+        signed-off-by: Tomás Migone <tomas@balena.io>
+      author: Tomás Migone
+      nested: []
+  version: 12.9.0
+  date: 2021-06-24T18:11:01.871Z
+- commits:
     - subject: 'Add revpi-connect, revpi-core-3 to Raspberry Pi variants'
       hash: 7c26480ada7a413c530f076cbe2c703c28e68916
       body: |
