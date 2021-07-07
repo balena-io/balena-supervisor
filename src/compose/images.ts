@@ -44,11 +44,6 @@ export interface Image {
 	downloadProgress?: number | null;
 }
 
-// TODO: Remove the need for this type...
-type NormalisedDockerImage = Docker.ImageInfo & {
-	NormalisedRepoTags: string[];
-};
-
 // Setup an event emitter
 interface ImageEvents {
 	change: void;
@@ -229,14 +224,13 @@ export async function getNormalisedTags(
 }
 
 async function withImagesFromDockerAndDB<T>(
-	cb: (dockerImages: NormalisedDockerImage[], composeImages: Image[]) => T,
+	cb: (dockerImages: Docker.ImageInfo[], composeImages: Image[]) => T,
 ) {
 	const [normalisedImages, dbImages] = await Promise.all([
-		Bluebird.map(docker.listImages({ digests: true }), async (image) => {
-			const newImage = _.clone(image) as NormalisedDockerImage;
-			newImage.NormalisedRepoTags = await getNormalisedTags(image);
-			return newImage;
-		}),
+		Bluebird.map(docker.listImages({ digests: true }), async (image) => ({
+			...image,
+			RepoTag: await getNormalisedTags(image),
+		})),
 		db.models('image').select(),
 	]);
 	return cb(normalisedImages, dbImages);
@@ -252,10 +246,10 @@ function addImageFailure(imageName: string, time = process.hrtime()) {
 
 function matchesTagOrDigest(
 	image: Image,
-	dockerImage: NormalisedDockerImage,
+	dockerImage: Docker.ImageInfo,
 ): boolean {
 	return (
-		_.includes(dockerImage.NormalisedRepoTags, image.name) ||
+		_.includes(dockerImage.RepoTags, image.name) ||
 		_.some(dockerImage.RepoDigests, (digest) =>
 			hasSameDigest(image.name, digest),
 		)
@@ -264,7 +258,7 @@ function matchesTagOrDigest(
 
 function isAvailableInDocker(
 	image: Image,
-	dockerImages: NormalisedDockerImage[],
+	dockerImages: Docker.ImageInfo[],
 ): boolean {
 	return _.some(
 		dockerImages,
