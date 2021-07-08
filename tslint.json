@@ -1,3 +1,11 @@
 {
-	"extends": ["@balena/lint/config/tslint-prettier.json"]
+	"extends": ["@balena/lint/config/tslint-prettier.json"],
+	"settings": {
+		"import/resolver": {
+			"alias": {
+				"map": [["~", "./"]],
+				"extensions": [".ts", ".js", ".tsx"]
+			}
+		}
+	}
 }

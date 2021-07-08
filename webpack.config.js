@@ -81,6 +81,7 @@ module.exports = function (env) {
 			alias: {
 				// Use the es2018 build instead of the default es2015 build
 				'pinejs-client-core': 'pinejs-client-core/es2018',
+				'~': path.resolve(__dirname, './'),
 			},
 		},
 		target: 'node',

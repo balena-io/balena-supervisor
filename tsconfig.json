@@ -11,7 +11,11 @@
 		"skipLibCheck": true,
 		"lib": ["es6"],
 		"resolveJsonModule": true,
-		"allowJs": true
+		"allowJs": true,
+		"baseUrl": "./",
+		"paths": {
+			"~/*": [ "*" ]
+		}
 	},
 	"include": ["src/**/*", "test/**/*", "typings/**/*.d.ts"]
 }
