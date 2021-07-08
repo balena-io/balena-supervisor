@@ -58,7 +58,7 @@ modprobe ip6_tables || true
 
 if [ "${LIVEPUSH}" = "1" ]; then
 	exec npx nodemon --watch src --watch typings --ignore tests -e js,ts,json \
-		 --exec node -r ts-node/register/transpile-only src/app.ts
+		 --exec node -r ts-node/register/transpile-only --inspect=0.0.0.0 src/app.ts
 else
 	exec node /usr/src/app/dist/app.js
 fi

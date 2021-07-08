@@ -50,7 +50,9 @@ RUN npm ci --build-from-source --sqlite=/usr/lib
 
 # We only run these commands when executing through
 # livepush, so they are presented as livepush directives
-#dev-run=apk add --no-cache ip6tables iptables
+# overwrite pre-built node with package version so --inspect can be used
+#dev-run=apk add --no-cache ip6tables iptables nghttp2-dev npm nodejs
+#dev-run=cp /usr/bin/node /usr/local/bin/node && cp /usr/bin/npm /usr/local/bin/npm
 #dev-copy=entry.sh .
 #dev-cmd-live=LIVEPUSH=1 ./entry.sh
 

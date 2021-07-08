@@ -101,6 +101,12 @@ and sync any relevant file changes to the running supervisor
 container. It will then decide if the container should be
 restarted, or let nodemon handle the changes.
 
+### Debugging
+
+Using live push the supervisor starts with remote debugging enabled via the --inspect flag. Use Chrome dev tools, or your IDE to [start a debugging session](https://nodejs.org/en/docs/guides/debugging-getting-started/#inspector-clients).
+
+Connect your debugger to `<device-local-ip>:9229`
+
 ### Using balenaOS-in-container
 
 This process will allow you to run a development instance of the supervisor on your local computer. It is not recommended for production scenarios, but allows someone developing on the supervisor to test changes quickly.
