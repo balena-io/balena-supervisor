@@ -14,6 +14,7 @@ import * as config from '../config';
 import { SchemaTypeKey, SchemaReturn } from '../config/schema-type';
 import * as eventTracker from '../event-tracker';
 import * as deviceState from '../device-state';
+import { downloadProgress } from '../lib/download-progress';
 
 // The exponential backoff starts at 15s
 const MINIMUM_BACKOFF_DELAY = 15000;
@@ -234,6 +235,7 @@ export const startReporting = () => {
 
 	// If the state changes, report it
 	deviceState.on('change', doReport);
+	deviceState.on('change', downloadProgress);
 	// But check once every max report frequency to ensure that changes in system
 	// info are picked up (CPU temp etc)
 	setInterval(doReport, constants.maxReportFrequency);
