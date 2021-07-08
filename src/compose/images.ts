@@ -7,12 +7,7 @@ import StrictEventEmitter from 'strict-event-emitter-types';
 import * as config from '../config';
 import * as db from '../db';
 import * as constants from '../lib/constants';
-import {
-	DeltaFetchOptions,
-	FetchOptions,
-	docker,
-	dockerToolbelt,
-} from '../lib/docker-utils';
+import { DeltaFetchOptions, FetchOptions, docker } from '../lib/docker-utils';
 import * as dockerUtils from '../lib/docker-utils';
 import { DeltaStillProcessingError, NotFoundError } from '../lib/errors';
 import * as LogTypes from '../lib/log-types';
@@ -135,7 +130,7 @@ export async function triggerFetch(
 
 	let success: boolean;
 	try {
-		const imageName = await normalise(image.name);
+		const imageName = normalise(image.name);
 		image = _.clone(image);
 		image.name = imageName;
 
@@ -214,22 +209,17 @@ export async function removeByDockerId(id: string): Promise<void> {
 	await remove(image);
 }
 
-export async function getNormalisedTags(
-	image: Docker.ImageInfo,
-): Promise<string[]> {
-	return await Bluebird.map(
-		image.RepoTags != null ? image.RepoTags : [],
-		normalise,
-	);
+export function getNormalisedTags(image: Docker.ImageInfo): string[] {
+	return (image.RepoTags || []).map(normalise);
 }
 
 async function withImagesFromDockerAndDB<T>(
 	cb: (dockerImages: Docker.ImageInfo[], composeImages: Image[]) => T,
 ) {
 	const [normalisedImages, dbImages] = await Promise.all([
-		Bluebird.map(docker.listImages({ digests: true }), async (image) => ({
+		Bluebird.map(docker.listImages({ digests: true }), (image) => ({
 			...image,
-			RepoTag: await getNormalisedTags(image),
+			RepoTag: getNormalisedTags(image),
 		})),
 		db.models('image').select(),
 	]);
@@ -348,12 +338,10 @@ export const save = async (image: Image): Promise<void> => {
 async function getImagesForCleanup(): Promise<string[]> {
 	const images: string[] = [];
 
-	const [
-		supervisorImageInfo,
-		supervisorImage,
-		usedImageIds,
-	] = await Promise.all([
-		dockerToolbelt.getRegistryAndName(constants.supervisorImage),
+	const supervisorImageInfo = dockerUtils.getRegistryAndName(
+		constants.supervisorImage,
+	);
+	const [supervisorImage, usedImageIds] = await Promise.all([
 		docker.getImage(constants.supervisorImage).inspect(),
 		db
 			.models('image')
@@ -374,7 +362,7 @@ async function getImagesForCleanup(): Promise<string[]> {
 		tagName,
 	}: {
 		imageName: string;
-		tagName: string;
+		tagName?: string;
 	}) => {
 		return (
 			_.some(supervisorRepos, (repo) => imageName === repo) &&
@@ -390,9 +378,8 @@ async function getImagesForCleanup(): Promise<string[]> {
 		} else if (!_.isEmpty(image.RepoTags) && image.Id !== supervisorImage.Id) {
 			// We also remove images from the supervisor repository with a different tag
 			for (const tag of image.RepoTags) {
-				const imageNameComponents = await dockerToolbelt.getRegistryAndName(
-					tag,
-				);
+				const imageNameComponents = dockerUtils.getRegistryAndName(tag);
+				// If
 				if (isSupervisorRepoTag(imageNameComponents)) {
 					images.push(image.Id);
 				}
@@ -473,8 +460,8 @@ export function isSameImage(
 	);
 }
 
-export function normalise(imageName: string): Bluebird<string> {
-	return dockerToolbelt.normaliseImageName(imageName);
+export function normalise(imageName: string) {
+	return dockerUtils.normaliseImageName(imageName);
 }
 
 function isDangling(image: Docker.ImageInfo): boolean {
@@ -636,8 +623,9 @@ async function fetchDelta(
 		serviceName,
 	);
 
+	// TODO: not sure if this can happen anymore
 	if (!hasDigest(image.name)) {
-		const { repo, tag } = await dockerUtils.getRepoAndTag(image.name);
+		const { repo, tag } = dockerUtils.getRepoAndTag(image.name);
 		await docker.getImage(id).tag({ repo, tag });
 	}
 
