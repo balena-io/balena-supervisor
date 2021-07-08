@@ -394,6 +394,8 @@ export async function addFeaturesFromLabels(
 			);
 		},
 		'io.balena.features.sysfs': () => service.config.volumes.push('/sys:/sys'),
+		'io.balena.features.early-run': () =>
+			service.config.volumes.push('/run:/run'),
 		'io.balena.features.procfs': () =>
 			service.config.volumes.push('/proc:/proc'),
 		'io.balena.features.gpu': () =>
