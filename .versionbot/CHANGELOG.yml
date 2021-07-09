@@ -1,4 +1,19 @@
 - commits:
+    - subject: Added docker-compose.yml and Dockerfile.template for building release
+      hash: 654242249a17ffbecae397b18b5e502c21a3c134
+      body: ''
+      footer:
+        Change-type: minor
+        change-type: minor
+        Closes: '#1687'
+        closes: '#1687'
+        Signed-off-by: Miguel Casqueira <miguel@balena.io>
+        signed-off-by: Miguel Casqueira <miguel@balena.io>
+      author: Miguel Casqueira
+      nested: []
+  version: 12.10.0
+  date: 2021-07-09T20:34:48.725Z
+- commits:
     - subject: Fix db-helper module for tests
       hash: 357d1baf6188d89b8552fd9068dbea9ac50aa008
       body: >
