@@ -1,0 +1,58 @@
+version: '2.1'
+volumes:
+  resin-data: {}
+services:
+  balena-supervisor:
+    build: ./
+    privileged: true
+    tty: true
+    restart: always
+    network_mode: host
+    environment:
+      - DOCKER_ROOT=/mnt/root/var/lib/docker
+      - DOCKER_SOCKET=/var/run/balena-engine.sock
+#       - "BOOT_MOUNTPOINT=$BOOT_MOUNTPOINT"                       <--- Must be set as service variable
+#       - "DELTA_ENDPOINT=$DELTA_ENDPOINT"                         <--- Must be set as a service variable
+#       - "LED_FILE=${LED_FILE}"                                   <--- Must be set as a service variable
+#       - "LISTEN_PORT=$LISTEN_PORT"                               <--- Must be set as a service variable
+#       - "NODE_EXTRA_CA_CERTS=${NODE_EXTRA_CA_CERTS}"             <--- Must be set as a service variable
+#       - "SUPERVISOR_IMAGE=${SUPERVISOR_IMAGE}:${SUPERVISOR_TAG}" <--- Must be set as aservice variable
+    volumes:
+      - 'resin-data:/data'
+#       - type: bind                                               <--- Bind mounts are not allowed
+#         source: /var/run/balena-engine.sock
+#         target: /var/run/balena-engine.sock 
+#       - type: bind                                               <--- Bind mounts are not allowed
+#         source: /var/run/balena-engine.sock
+#         source: /mnt/boot/config.json
+#         target: /boot/config.json
+#       - type: bind                                               <--- Bind mounts are not allowed
+#         source: /mnt/boot/config.json
+#         target: /boot/config.json
+#       - type: bind                                               <--- Bind mounts are not allowed
+#         source: /resin-data/balena-supervisor
+#         target: /data
+#       - type: bind                                               <--- Bind mounts are not allowed
+#         source: /proc/net/fib_trie  
+#         target: /mnt/fib_trie
+#       - type: bind                                               <--- Bind mounts are not allowed
+#         source: /mnt/data/apps.json 
+#         target: /mnt/data/apps.json
+#       - type: bind                                               <--- Bind mounts are not allowed
+#         source: /var/log/supervisor-log 
+#         target: /var/log
+#       - type: bind                                               <--- Bind mounts are not allowed
+#         source: /etc/ssl/certs 
+#         target: /etc/ssl/certs
+#         read_only: true
+#      - type: bind                                                <--- Bind mounts are not allowed
+#         source: /usr/share/ca-certificates
+#         target: /usr/share/ca-certificates
+#         read_only: true
+#       - type: bind                                               <--- Bind mounts are not allowed
+#         source: / 
+#         target: /mnt/root 
+    labels:
+      io.balena.features.balena-api: '1'
+      io.balena.features.dbus: '1' 
+#     io.balena.features.balena-socket: '1'                        <--- TODO: Make Supervisor use DOCKER_SOCKET instead of DOCKER_HOST
