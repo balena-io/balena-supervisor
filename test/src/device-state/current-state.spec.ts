@@ -73,6 +73,7 @@ describe('device-state/current-state', () => {
 		deviceId: 1337,
 		localMode: false,
 		hardwareMetrics: true,
+		developmentMode: false,
 	};
 
 	const testDeviceReportFields = {

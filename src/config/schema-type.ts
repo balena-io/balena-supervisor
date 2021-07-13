@@ -170,6 +170,10 @@ export const schemaTypes = {
 		type: PermissiveBoolean,
 		default: true,
 	},
+	developmentMode: {
+		type: PermissiveBoolean,
+		default: false,
+	},
 
 	// Function schema types
 	// The type should be the value that the promise resolves

@@ -264,6 +264,7 @@ describe('Device Backend Config', () => {
 			SUPERVISOR_OVERRIDE_LOCK: 'false',
 			SUPERVISOR_PERSISTENT_LOGGING: 'false',
 			SUPERVISOR_HARDWARE_METRICS: 'true',
+			SUPERVISOR_DEVELOPMENT_MODE: 'false',
 		});
 	});
 

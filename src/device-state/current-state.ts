@@ -45,6 +45,7 @@ type CurrentStateReportConf = {
 		| 'deviceId'
 		| 'localMode'
 		| 'hardwareMetrics'
+		| 'developmentMode'
 	>]: SchemaReturn<key>;
 };
 

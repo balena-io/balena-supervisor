@@ -196,6 +196,11 @@ const configKeys: Dictionary<ConfigOption> = {
 		varType: 'bool',
 		defaultValue: 'true',
 	},
+	developmentMode: {
+		envVarName: 'SUPERVISOR_DEVELOPMENT_MODE',
+		varType: 'bool',
+		defaultValue: 'false',
+	},
 };
 
 export const validKeys = [
