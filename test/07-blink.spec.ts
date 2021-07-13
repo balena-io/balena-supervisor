@@ -1,10 +1,21 @@
 import { promises as fs } from 'fs';
 import { expect } from 'chai';
+import * as mockFs from 'mock-fs';
 
 import blink = require('../src/lib/blink');
-import constants = require('../src/lib/constants');
+import * as constants from '../src/lib/constants';
 
 describe('blink', () => {
+	before(() => {
+		mockFs({
+			[constants.ledFile]: '1',
+		});
+	});
+
+	after(() => {
+		mockFs.restore();
+	});
+
 	it('is a blink function', () => expect(blink).to.be.a('function'));
 
 	it('has a pattern property with start and stop functions', () => {

@@ -5,7 +5,6 @@ process.env.CONFIG_MOUNT_POINT = './test/data/config.json';
 process.env.DATABASE_PATH = './test/data/database.sqlite';
 process.env.DATABASE_PATH_2 = './test/data/database2.sqlite';
 process.env.DATABASE_PATH_3 = './test/data/database3.sqlite';
-process.env.LED_FILE = './test/data/led_file';
 
 import * as fs from 'fs';
 
@@ -31,6 +30,5 @@ fs.writeFileSync(
 	fs.readFileSync('./test/data/testconfig.json'),
 );
 
-import './lib/mocked-dbus';
 import './lib/mocked-dockerode';
 import './lib/mocked-iptables';

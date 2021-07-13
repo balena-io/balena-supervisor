@@ -12,7 +12,6 @@ tools/dind/apps.json
 tools/dind/backup.tgz
 test/data/**/config*.json
 test/data/*.sqlite
-test/data/led_file
 /coverage/
 report.xml
 .DS_Store

@@ -35,12 +35,6 @@ export = async function () {
 	}
 
 	try {
-		fs.unlinkSync(process.env.LED_FILE!);
-	} catch (e) {
-		/* ignore /*/
-	}
-
-	try {
 		fs.writeFileSync(
 			'./test/data/config.json',
 			fs.readFileSync('./test/data/testconfig.json'),

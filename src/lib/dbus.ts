@@ -1,4 +1,4 @@
-import * as Bluebird from 'bluebird';
+import { promisify } from 'util';
 import * as dbus from 'dbus';
 import { TypedError } from 'typed-error';
 
@@ -6,10 +6,17 @@ import log from './supervisor-console';
 
 export class DbusError extends TypedError {}
 
-const bus = dbus.getBus('system');
-const getInterfaceAsync = Bluebird.promisify(bus.getInterface, {
-	context: bus,
-});
+let _dbus: dbus.DBusConnection;
+let _getInterfacePromise: (...args: string[]) => Promise<dbus.DBusInterface>;
+
+// Wrap bus & getInterface declarations to avoid import side effects
+function getInterfaceAsync(...args: string[]) {
+	if (!_dbus || !_getInterfacePromise) {
+		_dbus = dbus.getBus('system');
+		_getInterfacePromise = promisify(_dbus.getInterface).bind(_dbus);
+	}
+	return _getInterfacePromise(...args);
+}
 
 async function getSystemdInterface() {
 	try {

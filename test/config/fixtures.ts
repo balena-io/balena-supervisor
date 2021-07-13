@@ -4,6 +4,8 @@ import * as sinonChai from 'sinon-chai';
 import * as chaiThings from 'chai-things';
 import * as chaiLike from 'chai-like';
 
+import * as mockedDbus from '../lib/mocked-dbus';
+
 /**
  * Mocha runs this EXACTLY ONCE before all tests to set up globals that
  * are used among all test files, such as chai assertion plugins. See
@@ -15,11 +17,24 @@ import * as chaiLike from 'chai-like';
  * Also, avoid setting global mutable variables here.
  */
 export const mochaGlobalSetup = function () {
-	console.log('Setting up global fixtures for tests...');
+	console.log('☕  Setting up global fixtures for tests...');
 
 	/* Setup chai assertion plugins */
 	chai.use(chaiAsPromised);
 	chai.use(sinonChai);
 	chai.use(chaiLike);
 	chai.use(chaiThings);
+
+	/**
+	 * We need to mock dbus globally here, because there are some circular
+	 * dependencies which currently make it very unclear when dbus needs
+	 * to be stubbed.
+	 */
+	mockedDbus.mock();
+};
+
+export const mochaTeardownSetup = function () {
+	console.log('☕  Tearing down global fixtures for tests...');
+
+	mockedDbus.unmock();
 };

@@ -17,6 +17,7 @@ import * as targetStateCache from '../src/device-state/target-state-cache';
 import * as mockedDockerode from './lib/mocked-dockerode';
 import * as applicationManager from '../src/compose/application-manager';
 import * as logger from '../src/logger';
+import { log } from '../src/lib/supervisor-console';
 
 import { UpdatesLockedError } from '../src/lib/errors';
 
@@ -57,6 +58,9 @@ describe('SupervisorAPI [V2 Endpoints]', () => {
 		// Stub logs for all API methods
 		loggerStub = stub(logger, 'attach');
 		loggerStub.resolves();
+
+		// Suppress API logs
+		stub(log, 'api');
 	});
 
 	after(async () => {
@@ -69,10 +73,13 @@ describe('SupervisorAPI [V2 Endpoints]', () => {
 		}
 		// Remove any test data generated
 		await mockedAPI.cleanUp();
+
+		// Restore stubs & spies
 		serviceManagerMock.restore();
 		imagesMock.restore();
 		applicationManagerSpy.restore();
 		loggerStub.restore();
+		(log.api as SinonStub).restore();
 	});
 
 	afterEach(() => {
