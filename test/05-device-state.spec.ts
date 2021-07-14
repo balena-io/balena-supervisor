@@ -186,7 +186,7 @@ describe('deviceState', () => {
 		);
 
 		// @ts-expect-error Assigning to a RO property
-		images.cleanupDatabase = () => {
+		images.normaliseImageData = () => {
 			console.log('Cleanup database called');
 		};
 

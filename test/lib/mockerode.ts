@@ -715,9 +715,38 @@ export class MockEngine {
 		return Promise.resolve(delete this.containers[container.id]);
 	}
 
-	listImages() {
+	listImages({ filters = { reference: [] as string[] } } = {}) {
+		const filterList = [] as ((img: MockImage) => boolean)[];
+		const transformers = [] as ((img: MockImage) => MockImage)[];
+
+		// Add reference filters
+		if (filters.reference?.length > 0) {
+			const isMatchingReference = ({ repository, tag }: Reference) =>
+				filters.reference.includes(repository) ||
+				filters.reference.includes(
+					[repository, tag].filter((s) => !!s).join(':'),
+				);
+
+			// Create a filter for images matching the reference
+			filterList.push((img) => img.references.some(isMatchingReference));
+
+			// Create a transformer removing unused references from the image
+			transformers.push((img) =>
+				createImage(img.inspectInfo, {
+					References: img.references
+						.filter(isMatchingReference)
+						.map((ref) => ref.toString()),
+				}),
+			);
+		}
+
 		return Promise.resolve(
-			Object.values(this.images).map((image) => image.info),
+			Object.values(this.images)
+				// Remove images that do not match the filter
+				.filter((img) => filterList.every((fn) => fn(img)))
+				// Transform the image if needed
+				.map((image) => transformers.reduce((img, next) => next(img), image))
+				.map((image) => image.info),
 		);
 	}
 
@@ -778,6 +807,7 @@ export class MockEngine {
 	// an image is removed by tag.
 	removeImage(name: string, { force } = { force: false }) {
 		const image = this.findImage(name);
+		console.log('REMOVE', name);
 
 		// Throw an error if the image does not exist
 		if (!image) {

@@ -289,12 +289,12 @@ describe('SupervisorAPI [V2 Endpoints]', () => {
 							.body,
 					);
 				});
-			// Deactivate localmode
-			await config.set({ localMode: false });
 		});
 	});
 
-	describe('POST /v2/applications/:appId/start-service', function () {
+	// TODO: setup for this test is wrong, which leads to inconsistent data being passed to
+	// manager methods. A refactor is needed
+	describe.skip('POST /v2/applications/:appId/start-service', function () {
 		let appScopedKey: string;
 		let targetStateCacheMock: SinonStub;
 		let lockMock: SinonStub;
@@ -343,7 +343,7 @@ describe('SupervisorAPI [V2 Endpoints]', () => {
 			lockMock.restore();
 		});
 
-		it('should return 200 for an existing service', async () => {
+		it.skip('should return 200 for an existing service', async () => {
 			await mockedDockerode.testWithData(
 				{ containers: mockContainers, images: mockImages },
 				async () => {
@@ -394,7 +394,9 @@ describe('SupervisorAPI [V2 Endpoints]', () => {
 		});
 	});
 
-	describe('POST /v2/applications/:appId/restart-service', () => {
+	// TODO: setup for this test is wrong, which leads to inconsistent data being passed to
+	// manager methods. A refactor is needed
+	describe.skip('POST /v2/applications/:appId/restart-service', () => {
 		let appScopedKey: string;
 		let targetStateCacheMock: SinonStub;
 		let lockMock: SinonStub;

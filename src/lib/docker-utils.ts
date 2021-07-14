@@ -102,6 +102,12 @@ export function getRepoAndTag(image: string): { repo: string; tag?: string } {
 	return { repo: repoName, tag: tagName };
 }
 
+// Same as getRepoAndTag but joined with ':' for searching
+export function getImageWithTag(image: string) {
+	const { repo, tag } = getRepoAndTag(image);
+	return [repo, tag || 'latest'].join(':');
+}
+
 export async function fetchDeltaWithProgress(
 	imgDest: string,
 	deltaOpts: DeltaFetchOptions,

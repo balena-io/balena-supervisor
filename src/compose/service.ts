@@ -52,6 +52,8 @@ export class Service {
 
 	public dependsOn: string[] | null;
 
+	public dockerImageId: string | null;
+
 	// This looks weird, and it is. The lowercase statuses come from Docker,
 	// except the dashboard takes these values and displays them on the dashboard.
 	// What we should be doin is defining these container statuses, and have the
@@ -440,6 +442,7 @@ export class Service {
 		// with that
 		if (options.imageInfo?.Id != null) {
 			config.image = options.imageInfo.Id;
+			service.dockerImageId = options.imageInfo.Id;
 		}
 
 		// Mutate service with extra features
@@ -607,6 +610,7 @@ export class Service {
 		svc.imageId = parseInt(nameMatch[1], 10);
 		svc.releaseId = parseInt(nameMatch[2], 10);
 		svc.containerId = container.Id;
+		svc.dockerImageId = container.Config.Image;
 
 		return svc;
 	}
