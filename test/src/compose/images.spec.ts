@@ -31,15 +31,15 @@ describe('compose/images', () => {
 		sinon.restore();
 	});
 
-	afterEach(() => {
-		testDb.reset();
+	afterEach(async () => {
+		await testDb.reset();
 	});
 
-	it('finds images by the dockerImageId in the database if looking by name does not succeed', async () => {
+	it('finds image by matching digest on the database', async () => {
 		const dbImage = {
 			id: 246,
 			name:
-				'registry2.balena-cloud.com/v2/793f9296017bbfe026334820ab56bb3a@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+				'registry2.balena-cloud.com/v2/aaaaa@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
 			appId: 1658654,
 			serviceId: 650325,
 			serviceName: 'app_1',
@@ -56,16 +56,11 @@ describe('compose/images', () => {
 				{
 					Id:
 						'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc90e8e7',
-					Config: {
-						Labels: {
-							'io.balena.some-label': 'this is my label',
-						},
-					},
 				},
 				{
 					References: [
-						// Delta digest doesn't match image.name digest
-						'registry2.balena-cloud.com/v2/793f9296017bbfe026334820ab56bb3a:delta-ada9fbb57d90e61e:@sha256:12345a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+						// Different image repo
+						'registry2.balena-cloud.com/v2/bbbb@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
 					],
 				},
 			),
@@ -80,16 +75,260 @@ describe('compose/images', () => {
 				await expect(mockerode.getImage(dbImage.dockerImageId).inspect()).to.not
 					.be.rejected;
 
-				const img = await imageManager.inspectByName(dbImage.name);
+				// The image is found
+				expect(await imageManager.inspectByName(dbImage.name))
+					.to.have.property('Id')
+					.that.equals(
+						'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc90e8e7',
+					);
+
+				// It couldn't find the image by name so it finds it by matching digest
+				expect(mockerode.getImage).to.have.been.calledWith(
+					'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc90e8e7',
+				);
+			},
+			{ images },
+		);
+	});
+
+	it('finds image by tag on the engine', async () => {
+		const images = [
+			createImage(
+				{
+					Id:
+						'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc90e8e7',
+				},
+				{
+					References: ['some-image:some-tag'],
+				},
+			),
+		];
+
+		await withMockerode(
+			async (mockerode) => {
+				expect(await imageManager.inspectByName('some-image:some-tag'))
+					.to.have.property('Id')
+					.that.equals(
+						'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc90e8e7',
+					);
+
+				expect(mockerode.getImage).to.have.been.calledWith(
+					'some-image:some-tag',
+				);
+
+				// Check that non existing tags are not found
+				await expect(
+					imageManager.inspectByName('non-existing-image:non-existing-tag'),
+				).to.be.rejected;
+			},
+			{ images },
+		);
+	});
+
+	it('finds image by tag on the database', async () => {
+		const dbImage = {
+			id: 246,
+			name: 'some-image:some-tag',
+			appId: 1658654,
+			serviceId: 650325,
+			serviceName: 'app_1',
+			imageId: 2693229,
+			releaseId: 1524186,
+			dependent: 0,
+			dockerImageId:
+				'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc90e8e7',
+		};
+		await testDb.models('image').insert([dbImage]);
+
+		const images = [
+			createImage(
+				{
+					Id:
+						'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc90e8e7',
+				},
+				{
+					References: [
+						// Reference is different but there is a matching name on the database
+						'registry2.balena-cloud.com/v2/bbbb@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+					],
+				},
+			),
+		];
+
+		await withMockerode(
+			async (mockerode) => {
+				expect(await imageManager.inspectByName(dbImage.name))
+					.to.have.property('Id')
+					.that.equals(
+						'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc90e8e7',
+					);
 
 				expect(mockerode.getImage).to.have.been.calledWith(
 					'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc90e8e7',
 				);
 
-				// Check that the found image has the proper labels
-				expect(img.Config.Labels).to.deep.equal({
-					'io.balena.some-label': 'this is my label',
-				});
+				// Check that non existing tags are not found
+				await expect(
+					imageManager.inspectByName('non-existing-image:non-existing-tag'),
+				).to.be.rejected;
+			},
+			{ images },
+		);
+	});
+
+	it('finds image by reference on the engine', async () => {
+		const images = [
+			createImage(
+				{
+					Id:
+						'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc90e8e7',
+				},
+				{
+					References: [
+						// the reference we expect to look for is registry2.balena-cloud.com/v2/one
+						'registry2.balena-cloud.com/v2/one:delta-one@sha256:12345a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+						'registry2.balena-cloud.com/v2/one:latest@sha256:12345a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+					],
+				},
+			),
+		];
+
+		await withMockerode(
+			async (mockerode) => {
+				// This is really testing mockerode functionality
+				expect(
+					await mockerode.listImages({
+						filters: {
+							reference: ['registry2.balena-cloud.com/v2/one'],
+						},
+					}),
+				).to.have.lengthOf(1);
+
+				expect(
+					await imageManager.inspectByName(
+						// different target digest but same imageName
+						'registry2.balena-cloud.com/v2/one@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+					),
+				)
+					.to.have.property('Id')
+					.that.equals(
+						'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc90e8e7',
+					);
+
+				expect(mockerode.getImage).to.have.been.calledWith(
+					'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc90e8e7',
+				);
+
+				// Looking for the reference with correct name tag shoud not throw
+				await expect(
+					imageManager.inspectByName(
+						// different target digest but same tag
+						'registry2.balena-cloud.com/v2/one:delta-one@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+					),
+				).to.not.be.rejected;
+
+				// Looking for a non existing reference should throw
+				await expect(
+					imageManager.inspectByName(
+						'registry2.balena-cloud.com/v2/two@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+					),
+				).to.be.rejected;
+				await expect(
+					imageManager.inspectByName(
+						'registry2.balena-cloud.com/v2/one:some-tag@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+					),
+				).to.be.rejected;
+			},
+			{ images },
+		);
+	});
+
+	it('returns all images in both the database and the engine', async () => {
+		await testDb.models('image').insert([
+			{
+				id: 1,
+				name: 'first-image-name:first-image-tag',
+				appId: 1,
+				serviceId: 1,
+				serviceName: 'app_1',
+				imageId: 1,
+				releaseId: 1,
+				dependent: 0,
+				dockerImageId: 'sha256:first-image-id',
+			},
+			{
+				id: 2,
+				name: 'second-image-name:second-image-tag',
+				appId: 2,
+				serviceId: 2,
+				serviceName: 'app_2',
+				imageId: 2,
+				releaseId: 2,
+				dependent: 0,
+				dockerImageId: 'sha256:second-image-id',
+			},
+			{
+				id: 3,
+				name:
+					'registry2.balena-cloud.com/v2/three@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf558',
+				appId: 3,
+				serviceId: 3,
+				serviceName: 'app_3',
+				imageId: 3,
+				releaseId: 3,
+				dependent: 0,
+				// Third image has different name but same docker id
+				dockerImageId: 'sha256:second-image-id',
+			},
+			{
+				id: 4,
+				name: 'fourth-image-name:fourth-image-tag',
+				appId: 4,
+				serviceId: 4,
+				serviceName: 'app_4',
+				imageId: 4,
+				releaseId: 4,
+				dependent: 0,
+				// The fourth image exists on the engine but with the wrong id
+				dockerImageId: 'sha256:fourth-image-id',
+			},
+		]);
+
+		const images = [
+			createImage(
+				{
+					Id: 'sha256:first-image-id',
+				},
+				{
+					References: ['first-image-name:first-image-tag'],
+				},
+			),
+			createImage(
+				{
+					Id: 'sha256:second-image-id',
+				},
+				{
+					References: [
+						// The tag for the second image does not exist on the engine but it should be found
+						'not-second-image-name:some-image-tag',
+						'fourth-image-name:fourth-image-tag',
+						'registry2.balena-cloud.com/v2/three@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf558',
+					],
+				},
+			),
+		];
+
+		// Perform the test with our specially crafted data
+		await withMockerode(
+			async (mockerode) => {
+				// failsafe to check for mockerode problems
+				expect(
+					await mockerode.listImages(),
+					'images exist on the engine before test',
+				).to.have.lengthOf(2);
+
+				const availableImages = await imageManager.getAvailable();
+				expect(availableImages).to.have.lengthOf(4);
 			},
 			{ images },
 		);
@@ -99,8 +338,7 @@ describe('compose/images', () => {
 		// Legacy images don't have a dockerImageId so they are queried by name
 		const imageToRemove = {
 			id: 246,
-			name:
-				'registry2.balena-cloud.com/v2/793f9296017bbfe026334820ab56bb3a@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+			name: 'image-name:image-tag',
 			appId: 1658654,
 			serviceId: 650325,
 			serviceName: 'app_1',
@@ -120,7 +358,7 @@ describe('compose/images', () => {
 				{
 					// Image references
 					References: [
-						'registry2.balena-cloud.com/v2/793f9296017bbfe026334820ab56bb3a:delta-ada9fbb57d90e61e@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+						'image-name:image-tag@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
 					],
 				},
 			),
@@ -165,20 +403,19 @@ describe('compose/images', () => {
 		);
 	});
 
-	it('removes image from DB and engine when there is a single DB image with matching dockerImageId', async () => {
+	it('removes image from DB and engine when there is a single DB image with matching name', async () => {
 		// Newer image
 		const imageToRemove = {
 			id: 246,
 			name:
-				'registry2.balena-cloud.com/v2/793f9296017bbfe026334820ab56bb3a@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+				'registry2.balena-cloud.com/v2/one@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
 			appId: 1658654,
 			serviceId: 650325,
 			serviceName: 'app_1',
 			imageId: 2693229,
 			releaseId: 1524186,
 			dependent: 0,
-			dockerImageId:
-				'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc90e8e7',
+			dockerImageId: 'sha256:image-id-one',
 		};
 
 		// Insert images into the db
@@ -187,15 +424,14 @@ describe('compose/images', () => {
 			{
 				id: 247,
 				name:
-					'registry2.balena-cloud.com/v2/902cf44eb0ed51675a0bf95a7bbf0c91@sha256:12345a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+					'registry2.balena-cloud.com/v2/two@sha256:12345a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
 				appId: 1658654,
 				serviceId: 650331,
 				serviceName: 'app_2',
 				imageId: 2693230,
 				releaseId: 1524186,
 				dependent: 0,
-				dockerImageId:
-					'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc901234',
+				dockerImageId: 'sha256:image-id-two',
 			},
 		]);
 
@@ -204,13 +440,11 @@ describe('compose/images', () => {
 			// The image to remove
 			createImage(
 				{
-					Id:
-						'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc90e8e7',
+					Id: 'sha256:image-id-one',
 				},
 				{
-					// The target digest matches the image name
 					References: [
-						'registry2.balena-cloud.com/v2/793f9296017bbfe026334820ab56bb3a:delta-ada9fbb57d90e61e@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+						'registry2.balena-cloud.com/v2/one:delta-one@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
 					],
 				},
 			),
@@ -226,12 +460,11 @@ describe('compose/images', () => {
 			// The other image on the database
 			createImage(
 				{
-					Id:
-						'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc901234',
+					Id: 'sha256:image-id-two',
 				},
 				{
 					References: [
-						'registry2.balena-cloud.com/v2/902cf44eb0ed51675a0bf95a7bbf0c91:delta-80ed841a1d3fefa9@sha256:12345a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+						'registry2.balena-cloud.com/v2/two:delta-two@sha256:12345a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
 					],
 				},
 			),
@@ -254,20 +487,12 @@ describe('compose/images', () => {
 					'image exists on db before the test',
 				).to.have.lengthOf(1);
 
-				// Check that only one image with this dockerImageId exists in the db
-				expect(
-					await testDb
-						.models('image')
-						.where({ dockerImageId: imageToRemove.dockerImageId })
-						.select(),
-				).to.have.lengthOf(1);
-
 				// Now remove this image...
 				await imageManager.remove(imageToRemove);
 
 				// Check that the remove method was only called once
 				expect(mockerode.removeImage).to.have.been.calledOnceWith(
-					imageToRemove.dockerImageId,
+					'registry2.balena-cloud.com/v2/one:delta-one',
 				);
 
 				// Check that the database no longer has this image
@@ -281,25 +506,24 @@ describe('compose/images', () => {
 		);
 	});
 
-	it('removes image from DB by name where there are multiple db images with same docker id', async () => {
+	it('removes the requested image even when there are multiple DB images with same docker ID', async () => {
 		const imageToRemove = {
 			id: 246,
 			name:
-				'registry2.balena-cloud.com/v2/793f9296017bbfe026334820ab56bb3a@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+				'registry2.balena-cloud.com/v2/one@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
 			appId: 1658654,
 			serviceId: 650325,
 			serviceName: 'app_1',
 			imageId: 2693229,
 			releaseId: 1524186,
 			dependent: 0,
-			dockerImageId:
-				'sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc90e8e7',
+			dockerImageId: 'sha256:image-id-one',
 		};
 
 		const imageWithSameDockerImageId = {
 			id: 247,
 			name:
-				'registry2.balena-cloud.com/v2/902cf44eb0ed51675a0bf95a7bbf0c91@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+				'registry2.balena-cloud.com/v2/two@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
 			appId: 1658654,
 			serviceId: 650331,
 			serviceName: 'app_2',
@@ -308,7 +532,7 @@ describe('compose/images', () => {
 			dependent: 0,
 
 			// Same imageId
-			dockerImageId: imageToRemove.dockerImageId,
+			dockerImageId: 'sha256:image-id-one',
 		};
 
 		// Insert images into the db
@@ -382,31 +606,32 @@ describe('compose/images', () => {
 		);
 	});
 
-	it('removes image from DB by tag where there are multiple db images with same docker id and deltas are being used', async () => {
+	it('removes image from DB by tag when deltas are being used', async () => {
 		const imageToRemove = {
 			id: 246,
 			name:
-				'registry2.balena-cloud.com/v2/aaaa@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+				'registry2.balena-cloud.com/v2/one@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
 			appId: 1658654,
 			serviceId: 650325,
 			serviceName: 'app_1',
 			imageId: 2693229,
 			releaseId: 1524186,
 			dependent: 0,
-			dockerImageId: 'sha256:deadbeef',
+			dockerImageId: 'sha256:image-one-id',
 		};
 
 		const imageWithSameDockerImageId = {
 			id: 247,
 			name:
-				'registry2.balena-cloud.com/v2/bbbb@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
+				'registry2.balena-cloud.com/v2/two@sha256:2c969a1ba1c6bc10df53481f48c6a74dbd562cfb41ba58f81beabd03facf5582',
 			appId: 1658654,
 			serviceId: 650331,
 			serviceName: 'app_2',
 			imageId: 2693230,
 			releaseId: 1524186,
 			dependent: 0,
-			dockerImageId: imageToRemove.dockerImageId,
+			// Same docker id
+			dockerImageId: 'sha256:image-one-id',
 		};
 
 		// Insert images into the db
@@ -426,8 +651,8 @@ describe('compose/images', () => {
 				{
 					References: [
 						// The image has two deltas with different digests than those in image.name
-						'registry2.balena-cloud.com/v2/aaaa:delta-123@sha256:6eb712fc797ff68f258d9032cf292c266cb9bd8be4cbdaaafeb5a8824bb104fd',
-						'registry2.balena-cloud.com/v2/bbbb:delta-456@sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc901234',
+						'registry2.balena-cloud.com/v2/one:delta-one@sha256:6eb712fc797ff68f258d9032cf292c266cb9bd8be4cbdaaafeb5a8824bb104fd',
+						'registry2.balena-cloud.com/v2/two:delta-two@sha256:f1154d76c731f04711e5856b6e6858730e3023d9113124900ac65c2ccc901234',
 					],
 				},
 			),
@@ -460,7 +685,7 @@ describe('compose/images', () => {
 
 				// This tests the behavior
 				expect(mockerode.removeImage).to.have.been.calledOnceWith(
-					'registry2.balena-cloud.com/v2/aaaa:delta-123',
+					'registry2.balena-cloud.com/v2/one:delta-one',
 				);
 
 				// Check that the database no longer has this image
