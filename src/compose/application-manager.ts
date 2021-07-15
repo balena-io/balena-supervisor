@@ -126,7 +126,7 @@ export const initialized = (async () => {
 	await config.initialized;
 
 	await imageManager.initialized;
-	await imageManager.cleanupDatabase();
+	await imageManager.normaliseImageData();
 	const cleanup = async () => {
 		const containers = await docker.listContainers({ all: true });
 		await logger.clearOutOfDateDBLogs(_.map(containers, 'Id'));
@@ -259,7 +259,7 @@ export async function inferNextSteps(
 			// do to move to the target state
 			for (const id of targetAndCurrent) {
 				steps = steps.concat(
-					await currentApps[id].nextStepsForAppUpdate(
+					currentApps[id].nextStepsForAppUpdate(
 						{
 							localMode,
 							availableImages,
@@ -437,6 +437,7 @@ function killServicesUsingApi(current: InstancedAppState): CompositionStep[] {
 	return steps;
 }
 
+// TODO: deprecate this method. Application changes should use intermediate targets
 export async function executeStep(
 	step: CompositionStep,
 	{ force = false, skipLock = false } = {},
@@ -659,7 +660,7 @@ function saveAndRemoveImages(
 
 	const allImageDockerIdsForTargetApp = (app: App) =>
 		_(app.services)
-			.map((svc) => [svc.imageName, svc.config.image])
+			.map((svc) => [svc.imageName, svc.dockerImageId])
 			.filter((img) => img[1] != null)
 			.value();
 
@@ -683,14 +684,10 @@ function saveAndRemoveImages(
 	);
 
 	const availableAndUnused = _.filter(
-		availableImages,
+		availableWithoutIds,
 		(image) =>
 			!_.some(currentImages.concat(targetImages), (imageInUse) => {
-				return (
-					imageManager.isSameImage(image, imageInUse) ||
-					image.id === imageInUse?.id ||
-					image.dockerImageId === imageInUse?.dockerImageId
-				);
+				return _.isEqual(image, _.omit(imageInUse, ['dockerImageId', 'id']));
 			}),
 	);
 
@@ -711,9 +708,13 @@ function saveAndRemoveImages(
 	if (!localMode) {
 		imagesToSave = _.filter(targetImages, (targetImage) => {
 			const isActuallyAvailable = _.some(availableImages, (availableImage) => {
+				// There is an image with same image name or digest
+				// on the database
 				if (imageManager.isSameImage(availableImage, targetImage)) {
 					return true;
 				}
+				// The database image doesn't have the same name but has
+				// the same docker id as the target image
 				if (
 					availableImage.dockerImageId ===
 					targetImageDockerIds[targetImage.name]
@@ -722,10 +723,20 @@ function saveAndRemoveImages(
 				}
 				return false;
 			});
+
+			// There is no image in the database with the same metadata
 			const isNotSaved = !_.some(availableWithoutIds, (img) =>
 				_.isEqual(img, targetImage),
 			);
-			return isActuallyAvailable && isNotSaved;
+
+			// The image is not on the database but we know it exists on the
+			// engine because we could find it through inspectByName
+			const isAvailableOnTheEngine = !!targetImageDockerIds[targetImage.name];
+
+			return (
+				(isActuallyAvailable && isNotSaved) ||
+				(!isActuallyAvailable && isAvailableOnTheEngine)
+			);
 		});
 	}
 
