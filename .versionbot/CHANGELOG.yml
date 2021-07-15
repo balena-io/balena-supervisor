@@ -1,4 +1,44 @@
 - commits:
+    - subject: Use tags to track supervised images in docker
+      hash: 295968b4a2c31f29cc2951e67287084e22524b52
+      body: >
+        The image manager module now uses tags instead of docker IDs as the main
+
+        way to identify docker images on the engine. That is, if the target
+
+        state image has a name `imageName:tag@digest`, the supervisor will
+        always use
+
+        the given `imageName` and `tag` (which may be empty) to tag the image on
+
+        the engine after fetching. This PR also adds checkups to ensure
+
+        consistency is maintained between the database and the engine.
+
+
+        Using tags allows to simplify query and removal operations, since now
+
+        removing the image now means removing tags matching the image name.
+
+
+        Before this change the supervisor relied only on information in the
+
+        supervisor database, and used that to remove images by docker ID.
+        However, the docker
+
+        id is not a reliable identifier, since images retain the same id between
+
+        releases or between services in the same release.
+      footer:
+        Relates-to: '#1616 #1579'
+        relates-to: '#1616 #1579'
+        Change-type: patch
+        change-type: patch
+      author: Felipe Lalanne
+      nested: []
+  version: 12.9.5
+  date: 2021-07-15T20:25:08.053Z
+- commits:
     - subject: Fix db-helper module for tests
       hash: 357d1baf6188d89b8552fd9068dbea9ac50aa008
       body: >
