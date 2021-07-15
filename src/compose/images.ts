@@ -7,20 +7,20 @@ import StrictEventEmitter from 'strict-event-emitter-types';
 import * as config from '../config';
 import * as db from '../db';
 import * as constants from '../lib/constants';
-import {
-	DeltaFetchOptions,
-	FetchOptions,
-	docker,
-	dockerToolbelt,
-} from '../lib/docker-utils';
+import { DeltaFetchOptions, FetchOptions, docker } from '../lib/docker-utils';
 import * as dockerUtils from '../lib/docker-utils';
-import { DeltaStillProcessingError, NotFoundError } from '../lib/errors';
+import {
+	DeltaStillProcessingError,
+	NotFoundError,
+	StatusError,
+} from '../lib/errors';
 import * as LogTypes from '../lib/log-types';
 import * as validation from '../lib/validation';
 import * as logger from '../logger';
 import { ImageDownloadBackoffError } from './errors';
 
 import type { Service } from './service';
+import { strict as assert } from 'assert';
 
 import log from '../lib/supervisor-console';
 
@@ -43,11 +43,6 @@ export interface Image {
 	status?: 'Downloading' | 'Downloaded' | 'Deleting';
 	downloadProgress?: number | null;
 }
-
-// TODO: Remove the need for this type...
-type NormalisedDockerImage = Docker.ImageInfo & {
-	NormalisedRepoTags: string[];
-};
 
 // Setup an event emitter
 interface ImageEvents {
@@ -140,14 +135,19 @@ export async function triggerFetch(
 
 	let success: boolean;
 	try {
-		const imageName = await normalise(image.name);
+		const imageName = normalise(image.name);
 		image = _.clone(image);
 		image.name = imageName;
 
 		await markAsSupervised(image);
 
+		// Look for a matching image on the engine
 		const img = await inspectByName(image.name);
 		await db.models('image').update({ dockerImageId: img.Id }).where(image);
+
+		// If we are at this point, the image may not have the proper tag so add it
+		const { repo, tag } = dockerUtils.getRepoAndTag(image.name);
+		docker.getImage(img.Id).tag({ repo, tag });
 
 		onFinish(true);
 		return;
@@ -170,6 +170,10 @@ export async function triggerFetch(
 			} else {
 				id = await fetchImage(image, opts, onProgress);
 			}
+
+			// Tag the image with the proper reference
+			const { repo, tag } = dockerUtils.getRepoAndTag(image.name);
+			docker.getImage(id).tag({ repo, tag });
 
 			await db.models('image').update({ dockerImageId: id }).where(image);
 
@@ -219,24 +223,18 @@ export async function removeByDockerId(id: string): Promise<void> {
 	await remove(image);
 }
 
-export async function getNormalisedTags(
-	image: Docker.ImageInfo,
-): Promise<string[]> {
-	return await Bluebird.map(
-		image.RepoTags != null ? image.RepoTags : [],
-		normalise,
-	);
+export function getNormalisedTags(image: Docker.ImageInfo): string[] {
+	return (image.RepoTags || []).map(normalise);
 }
 
 async function withImagesFromDockerAndDB<T>(
-	cb: (dockerImages: NormalisedDockerImage[], composeImages: Image[]) => T,
+	cb: (dockerImages: Docker.ImageInfo[], composeImages: Image[]) => T,
 ) {
 	const [normalisedImages, dbImages] = await Promise.all([
-		Bluebird.map(docker.listImages({ digests: true }), async (image) => {
-			const newImage = _.clone(image) as NormalisedDockerImage;
-			newImage.NormalisedRepoTags = await getNormalisedTags(image);
-			return newImage;
-		}),
+		Bluebird.map(docker.listImages({ digests: true }), (image) => ({
+			...image,
+			RepoTag: getNormalisedTags(image),
+		})),
 		db.models('image').select(),
 	]);
 	return cb(normalisedImages, dbImages);
@@ -252,10 +250,10 @@ function addImageFailure(imageName: string, time = process.hrtime()) {
 
 function matchesTagOrDigest(
 	image: Image,
-	dockerImage: NormalisedDockerImage,
+	dockerImage: Docker.ImageInfo,
 ): boolean {
 	return (
-		_.includes(dockerImage.NormalisedRepoTags, image.name) ||
+		_.includes(dockerImage.RepoTags, dockerUtils.getImageWithTag(image.name)) ||
 		_.some(dockerImage.RepoDigests, (digest) =>
 			hasSameDigest(image.name, digest),
 		)
@@ -264,7 +262,7 @@ function matchesTagOrDigest(
 
 function isAvailableInDocker(
 	image: Image,
-	dockerImages: NormalisedDockerImage[],
+	dockerImages: Docker.ImageInfo[],
 ): boolean {
 	return _.some(
 		dockerImages,
@@ -288,7 +286,7 @@ export function getDownloadingImageIds(): number[] {
 	) as number[];
 }
 
-export async function cleanupDatabase(): Promise<void> {
+export async function normaliseImageData(): Promise<void> {
 	const imagesToRemove = await withImagesFromDockerAndDB(
 		async (dockerImages, supervisedImages) => {
 			for (const supervisedImage of supervisedImages) {
@@ -311,6 +309,21 @@ export async function cleanupDatabase(): Promise<void> {
 					}
 				}
 			}
+
+			// If the supervisor was interrupted between fetching the image and adding
+			// the tag, the engine image may have been left without the proper tag leading
+			// to issues with removal. Add tag just in case
+			await Promise.all(
+				supervisedImages
+					.filter((image) => isAvailableInDocker(image, dockerImages))
+					.map((image) => {
+						const { repo, tag } = dockerUtils.getRepoAndTag(image.name);
+						return docker.getImage(image.dockerImageId!).tag({ repo, tag });
+					}),
+			).catch(() => []); // Ignore errors
+
+			// If the image is in the DB but not available in docker, return it
+			// for removal on the database
 			return _.reject(supervisedImages, (image) =>
 				isAvailableInDocker(image, dockerImages),
 			);
@@ -346,6 +359,10 @@ export async function update(image: Image): Promise<void> {
 
 export const save = async (image: Image): Promise<void> => {
 	const img = await inspectByName(image.name);
+
+	const { repo, tag } = dockerUtils.getRepoAndTag(image.name);
+	await docker.getImage(img.Id).tag({ repo, tag });
+
 	image = _.clone(image);
 	image.dockerImageId = img.Id;
 	await markAsSupervised(image);
@@ -354,12 +371,10 @@ export const save = async (image: Image): Promise<void> => {
 async function getImagesForCleanup(): Promise<string[]> {
 	const images: string[] = [];
 
-	const [
-		supervisorImageInfo,
-		supervisorImage,
-		usedImageIds,
-	] = await Promise.all([
-		dockerToolbelt.getRegistryAndName(constants.supervisorImage),
+	const supervisorImageInfo = dockerUtils.getRegistryAndName(
+		constants.supervisorImage,
+	);
+	const [supervisorImage, usedImageIds] = await Promise.all([
 		docker.getImage(constants.supervisorImage).inspect(),
 		db
 			.models('image')
@@ -367,6 +382,8 @@ async function getImagesForCleanup(): Promise<string[]> {
 			.then((vals) => vals.map((img: Image) => img.dockerImageId)),
 	]);
 
+	// TODO: remove after we agree on what to do for
+	// supervisor image cleanup after hup
 	const supervisorRepos = [supervisorImageInfo.imageName];
 	// If we're on the new balena/ARCH-supervisor image
 	if (_.startsWith(supervisorImageInfo.imageName, 'balena/')) {
@@ -375,12 +392,13 @@ async function getImagesForCleanup(): Promise<string[]> {
 		);
 	}
 
+	// TODO: same as above, we no longer use tags to identify supervisors
 	const isSupervisorRepoTag = ({
 		imageName,
 		tagName,
 	}: {
 		imageName: string;
-		tagName: string;
+		tagName?: string;
 	}) => {
 		return (
 			_.some(supervisorRepos, (repo) => imageName === repo) &&
@@ -396,9 +414,8 @@ async function getImagesForCleanup(): Promise<string[]> {
 		} else if (!_.isEmpty(image.RepoTags) && image.Id !== supervisorImage.Id) {
 			// We also remove images from the supervisor repository with a different tag
 			for (const tag of image.RepoTags) {
-				const imageNameComponents = await dockerToolbelt.getRegistryAndName(
-					tag,
-				);
+				const imageNameComponents = dockerUtils.getRegistryAndName(tag);
+				// If
 				if (isSupervisorRepoTag(imageNameComponents)) {
 					images.push(image.Id);
 				}
@@ -417,35 +434,75 @@ async function getImagesForCleanup(): Promise<string[]> {
 		.value();
 }
 
-export async function inspectByName(
-	imageName: string,
-): Promise<Docker.ImageInspectInfo> {
-	try {
-		const image = await docker.getImage(imageName);
-		return await image.inspect();
-	} catch (e) {
-		if (NotFoundError(e)) {
-			const digest = imageName.split('@')[1];
-			let imagesFromDb: Image[];
-			if (digest != null) {
-				imagesFromDb = await db
-					.models('image')
-					.where('name', 'like', `%@${digest}`);
-			} else {
-				imagesFromDb = await db
-					.models('image')
-					.where({ name: imageName })
-					.select();
-			}
+export async function inspectByName(imageName: string) {
+	// Fail fast
+	assert(!!imageName, 'image name to inspect cannot be null');
 
-			for (const image of imagesFromDb) {
-				if (image.dockerImageId != null) {
-					return await docker.getImage(image.dockerImageId).inspect();
-				}
-			}
-		}
-		throw e;
-	}
+	// Get image by the full image URI. This will only work for regular pulls
+	// and old style images `repo:tag`
+	const inspectByURI = async () => await docker.getImage(imageName).inspect();
+
+	const {
+		registry,
+		imageName: name,
+		tagName,
+		digest,
+	} = dockerUtils.getRegistryAndName(imageName);
+
+	// Look for an image in the engine with registry/image as reference (tag)
+	// for images with deltas this should return unless there is some inconsistency
+	// and the tag was deleted
+	const repo = [registry, name].filter((s) => !!s).join('/');
+	const reference = [repo, tagName].filter((s) => !!s).join(':');
+
+	const inspectByReference = async () =>
+		await docker
+			.listImages({
+				digests: true,
+				filters: { reference: [reference] },
+			})
+			.then(([img]) =>
+				!!img
+					? docker.getImage(img.Id).inspect()
+					: Promise.reject(
+							new StatusError(
+								404,
+								`Failed to find an image matching ${imageName}`,
+							),
+					  ),
+			);
+
+	// Otherwise look in the database for an image with same digest or same name and
+	// get the dockerImageId from there. If this fails the image may still be on the
+	// engine but we need to re-trigger fetch and let the engine tell us if the
+	// image data is there
+	const inspectByDigest = async () =>
+		await db
+			.models('image')
+			.where('name', 'like', `%${digest}`)
+			.orWhere({ name: imageName }) // Default to looking for the full image name
+			.select()
+			.then((images) =>
+				images.filter((img: Image) => img.dockerImageId !== null),
+			)
+			// Assume that all db entries will point to the same dockerImageId, so use
+			// the first one. If this assumption is false, there is a bug with cleanup
+			.then(([img]) =>
+				!!img
+					? docker.getImage(img.dockerImageId).inspect()
+					: Promise.reject(
+							new StatusError(
+								404,
+								`Failed to find an image matching ${imageName}`,
+							),
+					  ),
+			);
+
+	// Convert the promise array into a promise chain
+	return await [inspectByURI, inspectByReference, inspectByDigest].reduce(
+		(res, p) => res.catch(() => p()),
+		Promise.reject('You should never see this'),
+	);
 }
 
 export async function isCleanupNeeded() {
@@ -479,8 +536,8 @@ export function isSameImage(
 	);
 }
 
-export function normalise(imageName: string): Bluebird<string> {
-	return dockerToolbelt.normaliseImageName(imageName);
+export function normalise(imageName: string) {
+	return dockerUtils.normaliseImageName(imageName);
 }
 
 function isDangling(image: Docker.ImageInfo): boolean {
@@ -514,73 +571,56 @@ async function removeImageIfNotNeeded(image: Image): Promise<void> {
 
 	const img = images[0];
 	try {
-		if (img.dockerImageId == null) {
-			// Legacy image from before we started using dockerImageId, so we try to remove it
-			// by name
-			await docker.getImage(img.name).remove({ force: true });
-			removed = true;
-		} else {
-			const imagesFromDb = await db
-				.models('image')
-				.where({ dockerImageId: img.dockerImageId })
-				.select();
-			if (
-				imagesFromDb.length === 1 &&
-				_.isEqual(format(imagesFromDb[0]), format(img))
-			) {
-				reportChange(
-					image.imageId,
-					_.merge(_.clone(image), { status: 'Deleting' }),
-				);
-				logger.logSystemEvent(LogTypes.deleteImage, { image });
-				docker.getImage(img.dockerImageId).remove({ force: true });
-				removed = true;
-			} else if (imagesFromDb.length > 1 && hasDigest(img.name)) {
-				const [dockerRepo] = img.name.split('@');
-				const dockerImage = await docker.getImage(img.dockerImageId).inspect();
-				const matchingTags = dockerImage.RepoTags.filter((tag) => {
-					const [tagRepo] = tag.split(':');
-					return tagRepo === dockerRepo;
-				});
+		const { registry, imageName, tagName } = dockerUtils.getRegistryAndName(
+			img.name,
+		);
+		// Look for an image in the engine with registry/image as reference (tag)
+		// for images with deltas this should return unless there is some inconsistency
+		// and the tag was deleted
+		const repo = [registry, imageName].filter((s) => !!s).join('/');
+		const reference = [repo, tagName].filter((s) => !!s).join(':');
 
-				reportChange(
-					image.imageId,
-					_.merge(_.clone(image), { status: 'Deleting' }),
-				);
-				logger.logSystemEvent(LogTypes.deleteImage, { image });
+		const tags = (
+			await docker.listImages({
+				digests: true,
+				filters: { reference: [reference] },
+			})
+		).reduce(
+			(tagList, imgInfo) => tagList.concat(imgInfo.RepoTags || []),
+			[] as string[],
+		);
 
-				// Remove tags that match the repo part of the image.name
-				await Promise.all(
-					matchingTags.map((tag) =>
-						docker.getImage(tag).remove({ noprune: true }),
-					),
-				);
+		reportChange(
+			image.imageId,
+			_.merge(_.clone(image), { status: 'Deleting' }),
+		);
+		logger.logSystemEvent(LogTypes.deleteImage, { image });
 
-				// Since there are multiple images with same id we need to
-				// remove by name
-				await Bluebird.delay(Math.random() * 100); // try to prevent race conditions
-				await docker.getImage(img.name).remove();
+		// Remove all matching tags in sequence
+		// as removing in parallel causes some engine weirdness
+		// this stops on the first error
+		await tags
+			.map((tag) => docker.getImage(tag).remove())
+			.reduce((promise, next) => promise.then(() => next), Promise.resolve());
 
-				removed = true;
-			} else if (!hasDigest(img.name)) {
-				// Image has a regular tag, so we might have to remove unnecessary tags
-				const dockerImage = await docker.getImage(img.dockerImageId).inspect();
-				const differentTags = _.reject(imagesFromDb, { name: img.name });
+		// Check for any remaining digests.
+		const digests = (
+			await docker.listImages({
+				digests: true,
+				filters: { reference: [reference] },
+			})
+		).reduce(
+			(digestList, imgInfo) => digestList.concat(imgInfo.RepoDigests || []),
+			[] as string[],
+		);
 
-				if (
-					dockerImage.RepoTags.length > 1 &&
-					_.includes(dockerImage.RepoTags, img.name) &&
-					_.some(dockerImage.RepoTags, (t) =>
-						_.some(differentTags, { name: t }),
-					)
-				) {
-					await docker.getImage(img.name).remove({ noprune: true });
-				}
-				removed = false;
-			} else {
-				removed = false;
-			}
-		}
+		// Remove all remaining digests
+		await digests
+			.map((digest) => docker.getImage(digest).remove())
+			.reduce((promise, next) => promise.then(() => next), Promise.resolve());
+
+		// Mark the image as removed
+		removed = true;
 	} catch (e) {
 		if (NotFoundError(e)) {
 			removed = false;
@@ -642,11 +682,6 @@ async function fetchDelta(
 		serviceName,
 	);
 
-	if (!hasDigest(image.name)) {
-		const { repo, tag } = await dockerUtils.getRepoAndTag(image.name);
-		await docker.getImage(id).tag({ repo, tag });
-	}
-
 	return id;
 }
 
@@ -674,12 +709,4 @@ function reportChange(imageId: Nullable<number>, status?: Partial<Image>) {
 		delete volatileState[imageId];
 		return events.emit('change');
 	}
-}
-
-function hasDigest(name: Nullable<string>): boolean {
-	if (name == null) {
-		return false;
-	}
-	const parts = name.split('@');
-	return parts[1] != null;
 }

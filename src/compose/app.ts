@@ -783,6 +783,7 @@ export class App {
 					),
 				))(),
 		]);
+		console.trace('READ HOSTNAME');
 
 		const svcOpts = {
 			appName: app.name,

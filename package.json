@@ -85,7 +85,6 @@
     "deep-object-diff": "^1.1.0",
     "docker-delta": "^2.2.11",
     "docker-progress": "^4.0.3",
-    "docker-toolbelt": "^3.3.10",
     "dockerode": "^2.5.8",
     "duration-js": "^4.0.0",
     "event-stream": "3.3.4",

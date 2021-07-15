@@ -13,6 +13,8 @@ import Volume from '../../../src/compose/volume';
 import log from '../../../src/lib/supervisor-console';
 import { InstancedAppState } from '../../../src/types/state';
 
+import * as dbHelper from '../../lib/db-helper';
+
 const DEFAULT_NETWORK = Network.fromComposeObject('default', 1, {});
 
 async function createService(
@@ -44,6 +46,13 @@ async function createService(
 		(svc as any)[k] = (state as any)[k];
 	}
 	return svc;
+}
+
+function createImage(svc: Service) {
+	return {
+		dockerImageId: svc.config.image,
+		...imageManager.imageFromService(svc),
+	};
 }
 
 function createApps(
@@ -101,7 +110,7 @@ function createCurrentState({
 	services = [] as Service[],
 	networks = [] as Network[],
 	volumes = [] as Volume[],
-	images = [] as Image[],
+	images = services.map((s) => createImage(s)) as Image[],
 	downloading = [] as number[],
 }) {
 	const currentApps = createApps({ services, networks, volumes });
@@ -127,7 +136,11 @@ function createCurrentState({
 }
 
 describe('compose/application-manager', () => {
+	let testDb: dbHelper.TestDatabase;
+
 	before(async () => {
+		testDb = await dbHelper.createDB();
+
 		// disable log output during testing
 		sinon.stub(log, 'debug');
 		sinon.stub(log, 'warn');
@@ -147,7 +160,16 @@ describe('compose/application-manager', () => {
 		(networkManager.supervisorNetworkReady as sinon.SinonStub).resolves(true);
 	});
 
+	afterEach(async () => {
+		await testDb.reset();
+	});
+
 	after(async () => {
+		try {
+			await testDb.destroy();
+		} catch (e) {
+			/* noop */
+		}
 		// Restore stubbed methods
 		sinon.restore();
 	});
@@ -192,7 +214,7 @@ describe('compose/application-manager', () => {
 			.that.deep.includes({ serviceName: 'main' });
 	});
 
-	it('infers a kill step when a service has to be removed', async () => {
+	it('when a service has to be removed', async () => {
 		const targetApps = createApps(
 			{
 				services: [],
@@ -230,7 +252,10 @@ describe('compose/application-manager', () => {
 		const targetApps = createApps(
 			{
 				services: [
-					await createService({ image: 'image-new' }, { appId: 1, imageId: 2 }),
+					await createService(
+						{ image: 'image-new' },
+						{ appId: 1, imageId: 2, options: {} },
+					),
 				],
 				networks: [DEFAULT_NETWORK],
 			},
@@ -244,6 +269,7 @@ describe('compose/application-manager', () => {
 		} = createCurrentState({
 			services: [await createService({}, { appId: 1, imageId: 1 })],
 			networks: [DEFAULT_NETWORK],
+			images: [],
 		});
 
 		const [fetchStep] = await applicationManager.inferNextSteps(
@@ -319,7 +345,12 @@ describe('compose/application-manager', () => {
 			downloading,
 			containerIdsByAppId,
 		} = createCurrentState({
-			services: [await createService({ labels }, { appId: 1, imageId: 1 })],
+			services: [
+				await createService(
+					{ image: 'image-old', labels },
+					{ appId: 1, imageId: 1 },
+				),
+			],
 			networks: [DEFAULT_NETWORK],
 		});
 
@@ -900,12 +931,13 @@ describe('compose/application-manager', () => {
 		expect(nextSteps).to.have.lengthOf(0);
 	});
 
-	it('should infer that an image should be removed if it is no longer referenced in current or target state', async () => {
+	it('should infer that an image should be removed if it is no longer referenced in current or target state (only target)', async () => {
 		const targetApps = createApps(
 			{
 				services: [
 					await createService(
 						{ image: 'main-image' },
+						// Target has a matching image already
 						{ options: { imageInfo: { Id: 'sha256:bbbb' } } },
 					),
 				],
@@ -919,17 +951,11 @@ describe('compose/application-manager', () => {
 			downloading,
 			containerIdsByAppId,
 		} = createCurrentState({
-			services: [
-				await createService(
-					{ image: 'main-image' },
-					{ options: { imageInfo: { Id: 'sha256:bbbb' } } },
-				),
-			],
+			services: [],
 			networks: [DEFAULT_NETWORK],
 			images: [
 				// An image for a service that no longer exists
 				{
-					id: 1, // The comparison also requires a database id
 					name: 'old-image',
 					appId: 5,
 					serviceId: 5,
@@ -940,7 +966,6 @@ describe('compose/application-manager', () => {
 					dockerImageId: 'sha256:aaaa',
 				},
 				{
-					id: 2, // The comparison also requires a database id
 					name: 'main-image',
 					appId: 1,
 					serviceId: 1,
@@ -972,10 +997,113 @@ describe('compose/application-manager', () => {
 			.that.deep.includes({ name: 'old-image' });
 	});
 
-	// TODO
-	it.skip(
-		'should infer that an image should be saved if it is not in the database',
-	);
+	it('should infer that an image should be removed if it is no longer referenced in current or target state (only current)', async () => {
+		const targetApps = createApps(
+			{
+				services: [],
+				networks: [DEFAULT_NETWORK],
+			},
+			true,
+		);
+		const {
+			currentApps,
+			availableImages,
+			downloading,
+			containerIdsByAppId,
+		} = createCurrentState({
+			services: [
+				await createService(
+					{ image: 'main-image' },
+					// Target has a matching image already
+					{ options: { imageInfo: { Id: 'sha256:bbbb' } } },
+				),
+			],
+			networks: [DEFAULT_NETWORK],
+			images: [
+				// An image for a service that no longer exists
+				{
+					name: 'old-image',
+					appId: 5,
+					serviceId: 5,
+					serviceName: 'old-service',
+					imageId: 5,
+					dependent: 0,
+					releaseId: 5,
+					dockerImageId: 'sha256:aaaa',
+				},
+				{
+					name: 'main-image',
+					appId: 1,
+					serviceId: 1,
+					serviceName: 'main',
+					imageId: 1,
+					dependent: 0,
+					releaseId: 1,
+					dockerImageId: 'sha256:bbbb',
+				},
+			],
+		});
+
+		const [removeImageStep] = await applicationManager.inferNextSteps(
+			currentApps,
+			targetApps,
+			{
+				downloading,
+				availableImages,
+				containerIdsByAppId,
+			},
+		);
+
+		// A start step shoud happen for the depended service first
+		expect(removeImageStep)
+			.to.have.property('action')
+			.that.equals('removeImage');
+		expect(removeImageStep)
+			.to.have.property('image')
+			.that.deep.includes({ name: 'old-image' });
+	});
+
+	it('should infer that an image should be saved if it is not in the available image list but it can be found on disk', async () => {
+		const targetApps = createApps(
+			{
+				services: [
+					await createService(
+						{ image: 'main-image' },
+						// Target has image info
+						{ options: { imageInfo: { Id: 'sha256:bbbb' } } },
+					),
+				],
+				networks: [DEFAULT_NETWORK],
+			},
+			true,
+		);
+		const {
+			currentApps,
+			availableImages,
+			downloading,
+			containerIdsByAppId,
+		} = createCurrentState({
+			services: [],
+			networks: [DEFAULT_NETWORK],
+			images: [], // no available images exist
+		});
+
+		const [saveImageStep] = await applicationManager.inferNextSteps(
+			currentApps,
+			targetApps,
+			{
+				downloading,
+				availableImages,
+				containerIdsByAppId,
+			},
+		);
+
+		// A start step shoud happen for the depended service first
+		expect(saveImageStep).to.have.property('action').that.equals('saveImage');
+		expect(saveImageStep)
+			.to.have.property('image')
+			.that.deep.includes({ name: 'main-image' });
+	});
 
 	it('should correctly generate steps for multiple apps', async () => {
 		const targetApps = createApps(
