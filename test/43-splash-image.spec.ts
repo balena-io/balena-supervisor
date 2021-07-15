@@ -17,20 +17,33 @@ describe('Splash image configuration', () => {
 	let readFileStub: SinonStub;
 	let writeFileAtomicStub: SinonStub;
 
+	before(() => {
+		writeFileAtomicStub = stub(fsUtils, 'writeFileAtomic');
+		stub(fsUtils, 'exec');
+		readFileStub = stub(fs, 'readFile');
+		readDirStub = stub(fs, 'readdir');
+	});
+
 	beforeEach(() => {
 		// Setup stubs
-		writeFileAtomicStub = stub(fsUtils, 'writeFileAtomic').resolves();
-		stub(fsUtils, 'exec').resolves();
-		readFileStub = stub(fs, 'readFile').resolves(
-			Buffer.from(logo, 'base64') as any,
-		);
+		writeFileAtomicStub.resolves();
+		(fsUtils.exec as SinonStub).resolves();
+		readFileStub.resolves(Buffer.from(logo, 'base64') as any);
 		readFileStub
 			.withArgs('test/data/mnt/boot/splash/balena-logo-default.png')
 			.resolves(Buffer.from(defaultLogo, 'base64') as any);
-		readDirStub = stub(fs, 'readdir').resolves(['balena-logo.png'] as any);
+		readDirStub.resolves(['balena-logo.png'] as any);
 	});
 
 	afterEach(() => {
+		// Reset stubs
+		writeFileAtomicStub.reset();
+		(fsUtils.exec as SinonStub).reset();
+		readFileStub.reset();
+		readDirStub.reset();
+	});
+
+	after(() => {
 		// Restore stubs
 		writeFileAtomicStub.restore();
 		(fsUtils.exec as SinonStub).restore();

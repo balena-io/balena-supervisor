@@ -158,6 +158,7 @@ async function setProxy(maybeConf: ProxyConfig | null): Promise<void> {
 
 const hostnamePath = path.join(constants.rootMountPoint, '/etc/hostname');
 async function readHostname() {
+	console.log('READING HOSTNAME');
 	const hostnameData = await fs.readFile(hostnamePath, 'utf-8');
 	return _.trim(hostnameData);
 }
